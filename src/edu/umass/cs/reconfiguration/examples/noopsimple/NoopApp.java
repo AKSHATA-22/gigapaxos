@@ -52,6 +52,7 @@ public class NoopApp extends AbstractReconfigurablePaxosApp<String> implements
 	// total number of reconfigurations across all records
 	private int numReconfigurationsSinceRecovery = -1;
 	private boolean verbose = false;
+	private int total = 0;
 
 	private class AppData {
 		final String name;
@@ -103,6 +104,8 @@ public class NoopApp extends AbstractReconfigurablePaxosApp<String> implements
 			return processRequest((AppRequest) request, doNotReplyToClient);
 		default:
 			// everything else is an absolute no-op
+			System.out.println("In execute method of Noop");
+			total +=1;
 			break;
 		}
 		return false;
@@ -152,6 +155,7 @@ public class NoopApp extends AbstractReconfigurablePaxosApp<String> implements
 
 		InetSocketAddress sockAddr = request.getSenderAddress();
 		try {
+			request.setResponse(String.valueOf(this.total));
 			this.messenger.getClientMessenger().sendToAddress(sockAddr,
 					request.toJSONObject());
 		} catch (JSONException | IOException e) {

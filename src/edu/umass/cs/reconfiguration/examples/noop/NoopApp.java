@@ -95,6 +95,7 @@ public class NoopApp implements Replicable, Reconfigurable,
 	@Override
 	public boolean execute(Request request,
 			boolean doNotReplyToClient) {
+		System.out.println("In no-op app");
 		if (request.toString().equals(Request.NO_OP))
 			return true;
 			switch ((AppRequest.PacketType) (request.getRequestType())) {

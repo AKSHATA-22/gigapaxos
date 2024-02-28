@@ -78,7 +78,7 @@ public class LinWritesLocReadsAppClient extends
 	public static void main(String[] args) throws IOException, InterruptedException {
 		LinWritesLocReadsAppClient asyncClient = new
 				LinWritesLocReadsAppClient();
-		int numRequests = args.length>=1 ? Integer.valueOf(args[0]) : 100;
+		int numRequests = args.length>=1 ? Integer.valueOf(args[0]) : 1;
 		for (int i = 0; i < numRequests; i++) {
 			final String requestValue = (int)(Math.random()*Integer.MAX_VALUE)+"";
 			SimpleAppRequest request;
@@ -90,7 +90,7 @@ public class LinWritesLocReadsAppClient extends
 							makeWriteRequest(),
 
 					// to redirect request to specific active replica
-					//new InetSocketAddress("localhost", 8001),
+					new InetSocketAddress("localhost", 8000),
 
 					new Callback<Request, SimpleAppRequest>() {
 						long createTime = System.currentTimeMillis();

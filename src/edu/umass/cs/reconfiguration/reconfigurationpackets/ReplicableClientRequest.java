@@ -230,6 +230,8 @@ public class ReplicableClientRequest extends JSONPacket implements
 
 	@Override
 	public String getServiceName() {
+//		System.out.println("Is requst instance of reconfigReq: ");
+//		System.out.println(request instanceof ReconfigurableRequest);
 		return this.request.getServiceName();
 	}
 

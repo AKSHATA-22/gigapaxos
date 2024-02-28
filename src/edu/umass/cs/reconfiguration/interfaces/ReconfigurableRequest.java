@@ -47,6 +47,8 @@ public interface ReconfigurableRequest extends Request {
 	default Object getSummary() {
 		return new Object() {
 			public String toString() {
+				System.out.println(ReconfigurableRequest.this.getRequestType());
+				System.out.println(ReconfigurableRequest.this.getEpochNumber());
 				return ReconfigurableRequest.this.getRequestType()
 						+ ":"
 						+ ReconfigurableRequest.this.getServiceName()

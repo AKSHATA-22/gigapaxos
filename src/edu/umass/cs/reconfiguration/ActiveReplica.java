@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import edu.umass.cs.reconfiguration.reconfigurationpackets.*;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -73,23 +74,7 @@ import edu.umass.cs.reconfiguration.interfaces.ReconfigurableNodeConfig;
 import edu.umass.cs.reconfiguration.interfaces.ReconfigurableRequest;
 import edu.umass.cs.reconfiguration.interfaces.ReconfiguratorCallback;
 import edu.umass.cs.reconfiguration.interfaces.ReplicableRequest;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.AckDropEpochFinalState;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.AckStartEpoch;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.AckStopEpoch;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.ActiveReplicaError;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.BasicReconfigurationPacket;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.DefaultAppRequest;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.DemandReport;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.DropEpochFinalState;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.EchoRequest;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.EpochFinalState;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.HelloRequest;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.ReconfigurationPacket;
 import edu.umass.cs.reconfiguration.reconfigurationpackets.ReconfigurationPacket.PacketType;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.ReplicableClientRequest;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.RequestEpochFinalState;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.StartEpoch;
-import edu.umass.cs.reconfiguration.reconfigurationpackets.StopEpoch;
 import edu.umass.cs.reconfiguration.reconfigurationprotocoltasks.ActiveReplicaProtocolTask;
 import edu.umass.cs.reconfiguration.reconfigurationprotocoltasks.WaitEpochFinalState;
 import edu.umass.cs.reconfiguration.reconfigurationutils.AbstractDemandProfile;
@@ -637,14 +622,19 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 
 		log.log(debug, "{0} handleMessage received {1}", new Object[] { this,
 				incoming.getSummary(log.isLoggable(debug)) });
-
 		long entryTime = System.nanoTime();
+//		System.out.println("Message received: "+incoming.getSummary());
+//		System.out.println(incoming.getRequestType());
+//		System.out.println(incoming.getClass());
+//		System.out.println("Is incoming instance of RC: ");
+		System.out.println(incoming instanceof BasicReconfigurationPacket);
 		@SuppressWarnings("unchecked")
 		BasicReconfigurationPacket<NodeIDType> rcPacket = incoming instanceof BasicReconfigurationPacket ? (BasicReconfigurationPacket<NodeIDType>) incoming
 				: null;
 		
 		try {
 			// try handling as reconfiguration packet through protocol task
+			System.out.println("In try block");
 			if (rcPacket != null) {
 				if ( rcPacket instanceof HelloRequest ){
 					headerMap.put(rcPacket.getInitiator().toString(), header);
@@ -660,6 +650,7 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 			}
 			// else must be app request
 			else if (assertAppRequest(incoming)) {
+				System.out.println("Asserted app request");
 				log.log(Level.FINE,
 						"{0} handleMessage received appRequest {1}",
 						new Object[] {
@@ -675,8 +666,11 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 						entryTime);
 				// enqueue demand stats sending callback
 				if (ENQUEUE_REQUEST)
-					if (isCoordinatedRequest)
+					if (isCoordinatedRequest){
 						enqueue(senderAndRequest);
+						System.out.println("Request Enqueued");
+					}
+
 
 				// app doesn't understand ReplicableClientRequest
 				if (!isCoordinatedRequest
@@ -696,12 +690,14 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 
 				InetSocketAddress sender = header.sndr, receiver = header.rcvr;
 				if (handled) {
+					System.out.println("Handled");
 					if (ENQUEUE_REQUEST)
 						if (!isCoordinatedRequest)
 							this.sendResponseAndDemandStats(request,
 									senderAndRequest, false);
 					// else do nothing as coordinated callback will be called
 				} else {
+					System.out.println("failed");
 					// if failed, dequeue useless enqueue
 					if (isCoordinatedRequest)
 						this.dequeue(((ReplicableRequest) request));
@@ -723,10 +719,13 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 				}
 			}
 		} catch (RequestParseException rpe) {
+			System.out.println("InCatch");
 			rpe.printStackTrace();
 		} catch (JSONException je) {
+			System.out.println("InCatch");
 			je.printStackTrace();
 		} catch (IOException e) {
+			System.out.println("InCatch");
 			e.printStackTrace();
 		}
 		return false; // neither reconfiguration packet nor app request
@@ -1220,6 +1219,7 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 	/* ****************** Private methods below ******************* */
 
 	private boolean handRequestToApp(Request request, ExecutedCallback callback) {
+		System.out.println("Handing request to Application");
 		long t = System.nanoTime();
 		boolean handled = false;
 		try {

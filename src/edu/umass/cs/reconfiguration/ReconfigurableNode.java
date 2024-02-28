@@ -24,7 +24,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 
+import edu.umass.cs.consistency.lazyReplication.LazyReplicationCoordinator;
 import edu.umass.cs.nio.NIOTransport;
+import edu.umass.cs.nio.interfaces.SSLMessenger;
 import edu.umass.cs.nio.interfaces.Stringifiable;
 import edu.umass.cs.reconfiguration.interfaces.ReplicaCoordinator;
 import org.json.JSONObject;
@@ -129,6 +131,8 @@ public abstract class ReconfigurableNode<NodeIDType> {
 		// else
 		{
 			Replicable app = ReconfigurationConfig.createApp(args);
+			System.out.println(args);
+			System.out.println(app.getClass());
 			if (app instanceof ClientMessenger)
 				((ClientMessenger) app).setClientMessenger(messenger);
 			else
@@ -215,6 +219,8 @@ public abstract class ReconfigurableNode<NodeIDType> {
 		else if (coordinatorClassName.equals("edu.umass.cs.reconfiguration.ChainReplicaCoordinator"))
 			return new ChainReplicaCoordinator<NodeIDType>(app, myID, nodeConfig,
 					messenger);
+		else if (coordinatorClassName.equals("edu.umass.cs.consistency.lazyReplication.LazyReplicationCoordinator"))
+			return new LazyReplicationCoordinator<NodeIDType>(app,  myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
 
 		return null;
 

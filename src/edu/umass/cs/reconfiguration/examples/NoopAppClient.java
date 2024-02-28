@@ -31,7 +31,7 @@ public class NoopAppClient extends ReconfigurableAppClientAsync<Request> impleme
 	public NoopAppClient() throws IOException {
 		super();
 	}
-	
+
 	private synchronized void incrNumResponses() {
 		this.numResponses++;
 	}
@@ -47,10 +47,13 @@ public class NoopAppClient extends ReconfigurableAppClientAsync<Request> impleme
 				for (int i = 0; i < numRequests; i++) {
 					long reqInitime = System.currentTimeMillis();
 					try {
-						NoopAppClient.this.sendRequest(ReplicableClientRequest.wrap(new AppRequest(name,
+						System.out.println("Sending test requests");
+						AppRequest request = new AppRequest(name,
 								"request_value" + i,
 								AppRequest.PacketType.DEFAULT_APP_REQUEST,
-								false)), new RequestCallback() {
+								false);
+						request.setNeedsCoordination(false);
+						NoopAppClient.this.sendRequest(ReplicableClientRequest.wrap(request), new RequestCallback() {
 
 							@Override
 							public void handleResponse(Request response) {
@@ -105,13 +108,13 @@ public class NoopAppClient extends ReconfigurableAppClientAsync<Request> impleme
 	 * to each of them. Refer to the parent class
 	 * {@link ReconfigurableAppClientAsync} for other utility methods available
 	 * to this method or to know how to write your own client.
-	 * 
+	 *
 	 * @param args
 	 * @throws IOException
 	 */
 	public static void main(String[] args) throws IOException {
 		final NoopAppClient client = new NoopAppClient();
-		final int numNames = 10;
+		final int numNames = 1;
 		final int numReqs = 20;
 		String namePrefix = "some_name";
 		String initialState = "some_default_initial_state";
@@ -129,12 +132,13 @@ public class NoopAppClient extends ReconfigurableAppClientAsync<Request> impleme
 								if (response instanceof CreateServiceName
 										&& !((CreateServiceName) response)
 												.isFailed())
+//									System.out.println("Callback");
 									client.testSendBunchOfRequests(name,
 											numReqs);
 								else
 									System.out.println(this
 											+ " failed to create name " + name);
-							} catch (IOException e) {
+							} catch (Exception e) {
 								e.printStackTrace();
 							}
 						}
