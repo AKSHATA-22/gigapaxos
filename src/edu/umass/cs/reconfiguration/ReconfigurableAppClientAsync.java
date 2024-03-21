@@ -1317,6 +1317,7 @@ public abstract class ReconfigurableAppClientAsync<V> implements
 	 */
 	public RequestFuture<V> sendRequest(ClientRequest request, Callback<Request, V> callback)
 			throws IOException {
+		System.out.println(request.getServiceName());
 		return this.sendRequest(request, callback, this.e2eRedirector);
 	}
 
@@ -1409,6 +1410,8 @@ public abstract class ReconfigurableAppClientAsync<V> implements
 		ActivesInfo activesInfo = null;
 		synchronized (this.activeReplicas) {
 			// lookup actives in the cache first
+			System.out.println(this.activeReplicas
+					.get(request.getServiceName()));
 			if ((activesInfo = this.activeReplicas
 					.get(request.getServiceName())) != null
 					&& (actives = activesInfo.actives) != null

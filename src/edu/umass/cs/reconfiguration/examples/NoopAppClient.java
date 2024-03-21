@@ -57,8 +57,11 @@ public class NoopAppClient extends ReconfigurableAppClientAsync<Request> impleme
 
 							@Override
 							public void handleResponse(Request response) {
-								if (response instanceof ActiveReplicaError)
-									return;
+								if (response instanceof ActiveReplicaError){
+									System.out.println(
+											"some error"
+									);
+									return;}
 								// else
 								System.out.println("Received response: "
 										+ response

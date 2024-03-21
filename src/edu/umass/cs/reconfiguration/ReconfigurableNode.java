@@ -24,6 +24,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 
+import edu.umass.cs.consistency.Quorum.QuorumCoordinator;
 import edu.umass.cs.consistency.lazyReplication.LazyReplicationCoordinator;
 import edu.umass.cs.nio.NIOTransport;
 import edu.umass.cs.nio.interfaces.SSLMessenger;
@@ -221,7 +222,8 @@ public abstract class ReconfigurableNode<NodeIDType> {
 					messenger);
 		else if (coordinatorClassName.equals("edu.umass.cs.consistency.lazyReplication.LazyReplicationCoordinator"))
 			return new LazyReplicationCoordinator<NodeIDType>(app,  myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
-
+		else if (coordinatorClassName.equals("edu.umass.cs.consistency.Quorum.QuorumCoordinator"))
+			return new QuorumCoordinator<>(app, myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
 		return null;
 
 		// FIXME: instantiating {@link ReplicaCoordinator} with Generic type

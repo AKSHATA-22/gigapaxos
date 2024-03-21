@@ -56,6 +56,8 @@ public class LazyReplicationCoordinator<NodeIDType> extends
     public boolean coordinateRequest(Request request, ExecutedCallback callback) throws IOException, RequestParseException {
         Level level = Level.FINE;
         System.out.println("In coordinate request, no coordination. Lazy Replication");
+        this.app.execute(request);
+        callback.executed(request, true);
         return true;
     }
 
@@ -64,13 +66,6 @@ public class LazyReplicationCoordinator<NodeIDType> extends
         System.out.println("In create replica group");
         this.groups.put(serviceName, new Data(serviceName, epoch,
                 nodes));
-        return true;
-    }
-
-    @Override
-    public boolean createReplicaGroup(Map<String, String> nameStates,
-                                      Set<NodeIDType> nodes) {
-        System.out.println("In other create replica group");
         return true;
     }
 

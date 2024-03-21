@@ -2,6 +2,7 @@ package edu.umass.cs.consistency.Quorum;
 
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 
+import java.sql.Array;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -18,7 +19,7 @@ public class ReplicatedQuorumStateMachine {
     public ReplicatedQuorumStateMachine(String quorumID, int version, int id,
                                         Set<Integer> members, Replicable app, String initialState,
                                         QuorumManager<?> qm){
-        this.quorumMembers = (ArrayList<Integer>) List.copyOf(members);
+        this.quorumMembers = new ArrayList<Integer>(members);
         this.quorumID = quorumID;
         this.version = version;
         this.quorumManager = qm;
@@ -40,6 +41,13 @@ public class ReplicatedQuorumStateMachine {
         return this.quorumMembers;
     }
 
+    public int[] getQuorumMembersArray() {
+        int[] quorumMembersArray = new int[this.quorumMembers.size()];
+        for (int i = 0; i < this.quorumMembers.size(); i++) {
+            quorumMembersArray[i] = this.quorumMembers.get(i);
+        }
+        return quorumMembersArray;
+    }
     public int getReadQuorum() {
         return this.readQuorum;
     }

@@ -10,6 +10,7 @@ import edu.umass.cs.nio.interfaces.Stringifiable;
 import edu.umass.cs.reconfiguration.AbstractReplicaCoordinator;
 import edu.umass.cs.reconfiguration.reconfigurationpackets.ReconfigurationPacket;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
+import io.netty.handler.codec.spdy.SpdyHttpResponseStreamIdHandler;
 
 import java.io.IOException;
 import java.util.HashSet;
@@ -49,12 +50,14 @@ public class QuorumCoordinator<NodeIDType>
     @Override
     public boolean coordinateRequest(Request request, ExecutedCallback callback) throws IOException, RequestParseException {
         // coordinate the request by sending in the respective quorum
+        System.out.println("In coordinate request");
+        System.out.println(request.toString());
         return this.quorumManager.propose(request.getServiceName(), request, callback)!= null;
     }
 
     @Override
     public boolean createReplicaGroup(String serviceName, int epoch, String state, Set<NodeIDType> nodes) {
-        // System.out.println(">>>>> Create: "+serviceName+", on "+this.getMyID());
+        System.out.println(">>>>> Create quorum: "+serviceName+", on "+this.getMyID());
 
         return this.quorumManager.createReplicatedQuorumForcibly(
                 serviceName, epoch, nodes, this, state);

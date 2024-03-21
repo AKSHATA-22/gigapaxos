@@ -322,6 +322,7 @@ public class MessageNIOTransport<NodeIDType, MessageType> extends
 	public int sendToAddress(InetSocketAddress isa, MessageType msg)
 			throws IOException {
 		msg = putEmulatedDelays(null, msg);
+		System.out.println(msg);
 		if (msg instanceof byte[])
 			return this.sendUnderlying(isa, (byte[]) msg);
 		else if (msg instanceof Byteable)

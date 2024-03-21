@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import edu.umass.cs.consistency.Quorum.QuorumRequestPacket;
 import edu.umass.cs.reconfiguration.reconfigurationpackets.*;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -634,7 +635,7 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 		
 		try {
 			// try handling as reconfiguration packet through protocol task
-			System.out.println("In try block");
+//			System.out.println("In try block");
 			if (rcPacket != null) {
 				if ( rcPacket instanceof HelloRequest ){
 					headerMap.put(rcPacket.getInitiator().toString(), header);
@@ -1037,18 +1038,25 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 
 	private static final Request makeClientRequest(Request request,
 			InetSocketAddress csa) {
-
+		System.out.println(request instanceof QuorumRequestPacket);
 		if (request instanceof ReplicableClientRequest)
 			return ((ReplicableClientRequest) request).setClientAddress(csa);
 		else if (request instanceof RequestPacket)
 			return request;
+//		This is temporary fix
+
+		else if (request instanceof QuorumRequestPacket) {
+			System.out.println("it is a quorum packet");
+			return request;
+		}
 
 		// else
 		if (!(request instanceof ClientRequest)
 				|| !(request instanceof ReplicableRequest && ((ReplicableRequest) request)
 						.needsCoordination())
-				|| request instanceof ReconfigurationPacket)
+				|| request instanceof ReconfigurationPacket) {
 			return request;
+		}
 
 		return ReplicableClientRequest.wrap(request).setClientAddress(csa);
 	}

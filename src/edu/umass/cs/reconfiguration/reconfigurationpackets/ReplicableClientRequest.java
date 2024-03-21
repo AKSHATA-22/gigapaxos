@@ -290,6 +290,7 @@ public class ReplicableClientRequest extends JSONPacket implements
 			e.printStackTrace();
 			return null;
 		}
+		System.out.println(Arrays.toString(reqBytes));
 		byte[] buf = new byte[
 		// type
 		Integer.BYTES

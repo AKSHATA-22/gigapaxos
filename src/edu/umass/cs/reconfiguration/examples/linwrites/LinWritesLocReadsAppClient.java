@@ -6,6 +6,7 @@ import edu.umass.cs.gigapaxos.interfaces.Request;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
 import edu.umass.cs.reconfiguration.ReconfigurableAppClientAsync;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
+import io.netty.handler.codec.spdy.SpdyHttpResponseStreamIdHandler;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -83,14 +84,16 @@ public class LinWritesLocReadsAppClient extends
 			final String requestValue = (int)(Math.random()*Integer.MAX_VALUE)+"";
 			SimpleAppRequest request;
 			final int j=i;
+			request = i%2==0 ? makeReadRequest() :
+					makeWriteRequest();
+			System.out.println(request);
 			asyncClient.sendRequest(
 
 					// even numbered requests are writes, odd-numbered reads
-					request = i%2==0 ? makeReadRequest() :
-							makeWriteRequest(),
+					request,
 
 					// to redirect request to specific active replica
-					new InetSocketAddress("localhost", 8000),
+					new InetSocketAddress("127.0.0.1", 2000),
 
 					new Callback<Request, SimpleAppRequest>() {
 						long createTime = System.currentTimeMillis();
