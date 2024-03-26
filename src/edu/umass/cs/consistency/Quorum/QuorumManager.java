@@ -236,7 +236,6 @@ public class QuorumManager<NodeIDType> {
 
     public String propose(String quorumID, Request request,
                           ExecutedCallback callback) {
-
         QuorumRequestPacket quorumRequestPacket = this.getQuorumRequestPacket(request);
         System.out.println("In propose");
         boolean matched = false;
@@ -252,8 +251,6 @@ public class QuorumManager<NodeIDType> {
         } else {
             System.out.println("The given quorumID has no state machine associated");
         }
-
-
         return matched ? rqsm.getQuorumID() : null;
     }
     private QuorumRequestPacket getQuorumRequestPacket(Request request){

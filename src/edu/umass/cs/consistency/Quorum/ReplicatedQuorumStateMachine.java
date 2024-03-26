@@ -1,5 +1,6 @@
 package edu.umass.cs.consistency.Quorum;
 
+import edu.umass.cs.consistency.EventualConsistency.DynamoManager;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 
 import java.sql.Array;
@@ -14,7 +15,8 @@ public class ReplicatedQuorumStateMachine {
 
     private final String quorumID;
     private final int version;
-    private final QuorumManager<?> quorumManager;
+    private QuorumManager<?> quorumManager = null;
+    private DynamoManager<?> dynamoManager = null;
 
     public ReplicatedQuorumStateMachine(String quorumID, int version, int id,
                                         Set<Integer> members, Replicable app, String initialState,
@@ -23,6 +25,27 @@ public class ReplicatedQuorumStateMachine {
         this.quorumID = quorumID;
         this.version = version;
         this.quorumManager = qm;
+        if(!this.quorumMembers.contains(id)){
+            this.quorumMembers.add(id);
+        }
+        if (this.quorumMembers.size()%2 == 0){
+            this.readQuorum = (this.quorumMembers.size())/2+1;
+            this.writeQuorum = (this.quorumMembers.size())/2;
+        }
+        else {
+            this.readQuorum = (this.quorumMembers.size()+1)/2;
+            this.writeQuorum = (this.quorumMembers.size()+1)/2;
+        }
+//        restore yet to be implemented
+
+    }
+    public ReplicatedQuorumStateMachine(String quorumID, int version, int id,
+                                        Set<Integer> members, Replicable app, String initialState,
+                                        DynamoManager<?> qm){
+        this.quorumMembers = new ArrayList<Integer>(members);
+        this.quorumID = quorumID;
+        this.version = version;
+        this.dynamoManager = qm;
         if(!this.quorumMembers.contains(id)){
             this.quorumMembers.add(id);
         }
