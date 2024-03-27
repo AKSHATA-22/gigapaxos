@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import edu.umass.cs.consistency.EventualConsistency.DynamoRequestPacket;
 import edu.umass.cs.consistency.Quorum.QuorumRequestPacket;
 import edu.umass.cs.reconfiguration.reconfigurationpackets.*;
 import org.json.JSONException;
@@ -628,7 +629,7 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 //		System.out.println(incoming.getRequestType());
 //		System.out.println(incoming.getClass());
 //		System.out.println("Is incoming instance of RC: ");
-		System.out.println(incoming instanceof BasicReconfigurationPacket);
+//		System.out.println(incoming instanceof BasicReconfigurationPacket);
 		@SuppressWarnings("unchecked")
 		BasicReconfigurationPacket<NodeIDType> rcPacket = incoming instanceof BasicReconfigurationPacket ? (BasicReconfigurationPacket<NodeIDType>) incoming
 				: null;
@@ -651,7 +652,7 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 			}
 			// else must be app request
 			else if (assertAppRequest(incoming)) {
-				System.out.println("Asserted app request");
+//				System.out.println("Asserted app request");
 				log.log(Level.FINE,
 						"{0} handleMessage received appRequest {1}",
 						new Object[] {
@@ -691,14 +692,14 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 
 				InetSocketAddress sender = header.sndr, receiver = header.rcvr;
 				if (handled) {
-					System.out.println("Handled");
+//					System.out.println("Handled");
 					if (ENQUEUE_REQUEST)
 						if (!isCoordinatedRequest)
 							this.sendResponseAndDemandStats(request,
 									senderAndRequest, false);
 					// else do nothing as coordinated callback will be called
 				} else {
-					System.out.println("failed");
+//					System.out.println("failed");
 					// if failed, dequeue useless enqueue
 					if (isCoordinatedRequest)
 						this.dequeue(((ReplicableRequest) request));
@@ -1046,7 +1047,11 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 //		This is temporary fix
 
 		else if (request instanceof QuorumRequestPacket) {
-			System.out.println("it is a quorum packet");
+//			System.out.println("it is a quorum packet");
+			return request;
+		}
+		else if (request instanceof DynamoRequestPacket) {
+//			System.out.println("it is a dynamo packet");
 			return request;
 		}
 
@@ -1227,7 +1232,7 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 	/* ****************** Private methods below ******************* */
 
 	private boolean handRequestToApp(Request request, ExecutedCallback callback) {
-		System.out.println("Handing request to Application");
+//		System.out.println("Handing request to Application");
 		long t = System.nanoTime();
 		boolean handled = false;
 		try {

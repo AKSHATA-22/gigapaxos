@@ -54,6 +54,7 @@ public class QuorumApp extends StatefulAdderApp {
             return true;
         }
         else System.err.println("Unknown request type: " + request.getRequestType());
+
         return false;
     }
 

@@ -22,6 +22,7 @@ public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPack
     public Request getRequest(String stringified) throws RequestParseException {
         System.out.println("In getRequest of client");
         try {
+            System.out.println(stringified);
             return new DynamoRequestPacket(new JSONObject(stringified));
         }
         catch (Exception e){
@@ -43,10 +44,10 @@ public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPack
         } catch (JSONException e) {
             throw new RuntimeException(e);
         }
-        request = new DynamoRequestPacket((long)(Math.random()*Integer.MAX_VALUE),
-                "", DynamoRequestPacket.DynamoPacketType.PUT, DynamoManager.getDefaultServiceName());
 //        request = new DynamoRequestPacket((long)(Math.random()*Integer.MAX_VALUE),
-//                "Chair", DynamoRequestPacket.DynamoPacketType.GET, DynamoManager.getDefaultServiceName());
+//                jsonObject.toString(), DynamoRequestPacket.DynamoPacketType.PUT, DynamoManager.getDefaultServiceName());
+        request = new DynamoRequestPacket((long)(Math.random()*Integer.MAX_VALUE),
+                "Chair", DynamoRequestPacket.DynamoPacketType.GET, DynamoManager.getDefaultServiceName());
         long reqInitime = System.currentTimeMillis();
         System.out.println(request);
         dynamoClient.sendRequest(request ,
