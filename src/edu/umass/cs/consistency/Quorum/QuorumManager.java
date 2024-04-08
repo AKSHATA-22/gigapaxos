@@ -1,6 +1,7 @@
 package edu.umass.cs.consistency.Quorum;
 
 import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
+import edu.umass.cs.consistency.EventualConsistency.DynamoRequestPacket;
 import edu.umass.cs.gigapaxos.PaxosConfig;
 import edu.umass.cs.gigapaxos.examples.noop.NoopPaxosApp;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
@@ -18,6 +19,7 @@ import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
 import edu.umass.cs.utils.Config;
 import org.json.JSONObject;
 
+import java.io.*;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Set;
@@ -32,7 +34,7 @@ public class QuorumManager<NodeIDType> {
     private final HashMap<String, ReplicatedQuorumStateMachine> replicatedQuorums;
 
     //    Maps the write version/state of this node for a quorumID
-    private HashMap<Integer, Integer> version;
+    private HashMap<String, HashMap<Integer, Integer>> vectorClock = new HashMap<>();
     private final Stringifiable<NodeIDType> unstringer;
     // a map of NodeIDType objects to integers
     private final IntegerMap<NodeIDType> integerMap = new IntegerMap<NodeIDType>();
@@ -100,6 +102,28 @@ public class QuorumManager<NodeIDType> {
             return this.quorumRequestPacket;
         }
     }
+//    public class reconcileThread extends Thread{
+//        HashMap<String, ReplicatedQuorumStateMachine> replicatedQuorums = null;
+//
+//        public reconcileThread(HashMap<String, ReplicatedQuorumStateMachine> replicatedQuorums){
+//            this.replicatedQuorums = replicatedQuorums;
+//        }
+//        @Override
+//        public void run() {
+//            try {
+//                for (int i = 0; i < this.replicatedQuorums.size(); i++) {
+////                send the version vector for each quorum to all the members
+//                    QuorumRequestPacket reconcilePacket = new QuorumRequestPacket((long) (Math.random() * Integer.MAX_VALUE),
+//                            this.quorumManager.getQuorums(), QuorumRequestPacket.QuorumPacketType.QUORUM_PACKET, QuorumManager.getDefaultServiceName());
+//                }
+//                Thread.sleep(5000);
+//            }
+//            catch (Exception e){
+//                System.out.println(e);
+//            }
+//        }
+//
+//    }
     private void handleQuorumPacket(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback){
 
         QuorumRequestPacket.QuorumPacketType packetType = qp.getType();
@@ -124,6 +148,8 @@ public class QuorumManager<NodeIDType> {
             case WRITEACK:
                 // write_quorum_node -> node
                 handleWriteAck(qp, rqsm);
+                break;
+            case QUORUM_PACKET:
                 break;
             default:
                 break;
@@ -152,6 +178,7 @@ public class QuorumManager<NodeIDType> {
         System.out.println(qp.toString());
         Request request = getInterfaceRequest(this.myApp, qp.toString());
         this.myApp.execute(request, false);
+
         if(qp.getType() == QuorumRequestPacket.QuorumPacketType.READFORWARD){
             qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READACK);
         }
@@ -159,6 +186,7 @@ public class QuorumManager<NodeIDType> {
             qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWRITEACK);
         }
         else{
+//            this.checkpoint(this.version);
             qp.setPacketType(QuorumRequestPacket.QuorumPacketType.WRITEACK);
         }
         int dest = qp.getDestination();
@@ -322,6 +350,33 @@ public class QuorumManager<NodeIDType> {
         if ( rqsm != null)
             return (int) rqsm.getVersion();
         return -1;
+    }
+    private void checkpoint(HashMap<String, Integer> hashMap) {
+        try {
+            FileOutputStream fileOut = new FileOutputStream("/tmp/quorum_logs/checkpoint.log");
+            ObjectOutputStream out = new ObjectOutputStream(fileOut);
+            out.writeObject(hashMap);
+            out.close();
+            fileOut.close();
+            System.out.println("Checkpoint created successfully.");
+        } catch (Exception e) {
+            System.err.println("Error during checkpoint: " + e.getMessage());
+        }
+    }
+    private void rollback(HashMap<String, Integer> hashMap) {
+        try {
+            FileInputStream fileIn = new FileInputStream("/tmp/quorum_logs/checkpoint.log");
+            ObjectInputStream in = new ObjectInputStream(fileIn);
+            HashMap<String, Integer> checkpointedHashMap = (HashMap<String, Integer>) in.readObject();
+            in.close();
+            fileIn.close();
+            // Restore the state
+            hashMap.clear();
+            hashMap.putAll(checkpointedHashMap);
+            System.out.println("Rollback successful.");
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("Error during rollback: " + e.getMessage());
+        }
     }
 
     public ArrayList<String> getQuorums(){

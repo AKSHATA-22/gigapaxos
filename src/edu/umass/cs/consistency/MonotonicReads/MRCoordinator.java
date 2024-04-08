@@ -1,7 +1,5 @@
-package edu.umass.cs.consistency.EventualConsistency;
+package edu.umass.cs.consistency.MonotonicReads;
 
-import edu.umass.cs.consistency.Quorum.QuorumManager;
-import edu.umass.cs.consistency.Quorum.QuorumRequestPacket;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
@@ -17,15 +15,16 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
-public class DynamoCoordinator<NodeIDType>
+public class MRCoordinator<NodeIDType>
         extends AbstractReplicaCoordinator<NodeIDType> {
-    private final DynamoManager<NodeIDType> dynamoManager;
-    public DynamoCoordinator(Replicable app, NodeIDType myID,
+    private final MRManager<NodeIDType> mrManager;
+
+    public MRCoordinator(Replicable app, NodeIDType myID,
                              Stringifiable<NodeIDType> unstringer,
                              Messenger<NodeIDType, ?> niot) {
         super(app, niot);
         assert (niot instanceof JSONMessenger);
-        this.dynamoManager = new DynamoManager(myID, unstringer,
+        this.mrManager = new MRManager(myID, unstringer,
                 (JSONMessenger<NodeIDType>) niot, this, null,
                 true);
     }
@@ -39,40 +38,35 @@ public class DynamoCoordinator<NodeIDType>
 
         if (types==null) types= new HashSet<IntegerPacketType>();
 
-        for (IntegerPacketType type: DynamoRequestPacket.DynamoPacketType.values())
+        for (IntegerPacketType type: MRRequestPacket.MRPacketType.values())
             types.add(type);
 
         types.add(ReconfigurationPacket.PacketType.REPLICABLE_CLIENT_REQUEST);
         return requestTypes = types;
     }
-
     @Override
     public boolean coordinateRequest(Request request, ExecutedCallback callback) throws IOException, RequestParseException {
-        // coordinate the request by sending in the respective quorum
-//        System.out.println("In coordinate request");
-        System.out.println(request.toString());
-        return this.dynamoManager.propose(request.getServiceName(), request, callback)!= null;
+        return this.mrManager.propose(request.getServiceName(), request, callback)!= null;
     }
 
     @Override
     public boolean createReplicaGroup(String serviceName, int epoch, String state, Set<NodeIDType> nodes) {
-        System.out.println(">>>>> Create quorum: "+serviceName+", on "+this.getMyID());
+        System.out.println(">>>>> Creating replica group of servicename: "+serviceName+", on "+this.getMyID());
 
-        return this.dynamoManager.createReplicatedQuorumForcibly(
+        return this.mrManager.createReplicatedQuorumForcibly(
                 serviceName, epoch, nodes, this, state);
     }
 
     @Override
     public boolean deleteReplicaGroup(String serviceName, int epoch) {
-        return this.dynamoManager.deleteReplicatedQuorum(serviceName, epoch);
+        return this.mrManager.deleteReplicatedQuorum(serviceName, epoch);
     }
-
     @Override
     public Set<NodeIDType> getReplicaGroup(String serviceName) {
-        return this.dynamoManager.getReplicaGroup(serviceName);
+        return this.mrManager.getReplicaGroup(serviceName);
     }
     @Override
-    public Integer getEpoch(String name) {
-        return this.dynamoManager.getVersion(name);
+    public Integer getEpoch(String serviceName) {
+        return this.mrManager.getVersion(serviceName);
     }
 }

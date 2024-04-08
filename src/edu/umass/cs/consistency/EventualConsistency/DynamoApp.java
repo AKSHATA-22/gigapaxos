@@ -38,7 +38,6 @@ public class DynamoApp implements Replicable {
     @Override
     public boolean execute(Request request) {
         System.out.println("In execute request of Dynamo Replication");
-        this.cart.put("Chair", 2);
         if (request instanceof DynamoRequestPacket) {
             if (((DynamoRequestPacket) request).getType() == DynamoRequestPacket.DynamoPacketType.GET_FWD) {
                 System.out.println("GET request for index: "+((DynamoRequestPacket) request).getRequestValue());
@@ -53,7 +52,12 @@ public class DynamoApp implements Replicable {
                 System.out.println("In Dynamo App for PUT request");
                 try {
                     JSONObject jsonObject = new JSONObject(((DynamoRequestPacket) request).getRequestValue());
-                    this.cart.put(jsonObject.getString("key"), jsonObject.getInt("value"));
+                    if (this.cart.get(jsonObject.getString("key")) != null){
+                        this.cart.put(jsonObject.getString("key"), this.cart.get(jsonObject.getString("key"))+1);
+                    }
+                    else {
+                        this.cart.put(jsonObject.getString("key"), 1);
+                    }
                 } catch (JSONException e) {
                     System.out.println("Check the request value");
                     throw new RuntimeException(e);

@@ -88,11 +88,11 @@ public class DynamoManager<NodeIDType> {
                 boolean greater = true;
                 boolean smaller = true;
                 for (int i = 0; i < vectorClock.size(); i++) {
-                    if(packet.getVectorClock().get(rqsm.getQuorumMembers().get(i)) >= vectorClock.get(rqsm.getQuorumMembers().get(i))){
+                    if(packet.getVectorClock().get(rqsm.getQuorumMembers().get(i)) > vectorClock.get(rqsm.getQuorumMembers().get(i))){
                         greater &= true;
                         smaller &= false;
                     }
-                    else {
+                    else if(packet.getVectorClock().get(rqsm.getQuorumMembers().get(i)) < vectorClock.get(rqsm.getQuorumMembers().get(i))){
                         greater &= false;
                         smaller &= true;
                     }
@@ -109,6 +109,7 @@ public class DynamoManager<NodeIDType> {
             if (!reconciled){
                 dynamoRequestPacket.addToResponseArrayList(new DynamoRequestPacket.DynamoPacket(vectorClock, value));
             }
+
         }
         public Integer getNumOfAcksReceived(){
             return this.numOfAcksReceived;
@@ -186,10 +187,10 @@ public class DynamoManager<NodeIDType> {
             this.myApp.execute(request, false);
         }
         qp.setPacketType(DynamoRequestPacket.DynamoPacketType.PUT_ACK);
+        this.reconcileVectorClock(qp.getRequestVectorClock(), rqsm, qp.getSource());
         int dest = qp.getDestination();
         qp.setDestination(qp.getSource());
         qp.setSource(dest);
-        this.reconcileVectorClock(qp.getRequestVectorClock(), rqsm);
         qp.setResponsePacket(new DynamoRequestPacket.DynamoPacket(this.vectorClock.get(rqsm.getQuorumID()), -1));
         this.sendRequest(qp, qp.getDestination());
     }
@@ -208,7 +209,6 @@ public class DynamoManager<NodeIDType> {
     public void handleAck(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
 //        append in the hashmap and check the total
         if (qp.getType() == DynamoRequestPacket.DynamoPacketType.PUT_ACK){
-            this.reconcileVectorClock(qp.getResponsePacket().getVectorClock(), rqsm);
             try {
                 if (this.requestsReceived.get(qp.getRequestID()).incrementAck(qp, rqsm) >= rqsm.getWriteQuorum()-1){
                     sendResponse(qp.getRequestID());
@@ -255,13 +255,9 @@ public class DynamoManager<NodeIDType> {
             e.printStackTrace();
         }
     }
-    private void reconcileVectorClock(HashMap<Integer, Integer> requestClock, ReplicatedQuorumStateMachine rqsm){
+    private void reconcileVectorClock(HashMap<Integer, Integer> requestClock, ReplicatedQuorumStateMachine rqsm, int node){
         ArrayList<Integer> members = rqsm.getQuorumMembers();
-        for (int i = 0; i < requestClock.size(); i++) {
-            if(requestClock.get(members.get(i)) > this.vectorClock.get(rqsm.getQuorumID()).get(members.get(i))){
-                this.vectorClock.get(rqsm.getQuorumID()).put(members.get(i), requestClock.get(members.get(i)));
-            }
-        }
+        this.vectorClock.get(rqsm.getQuorumID()).put(members.get(node), requestClock.get(members.get(node)));
     }
     private static Request getInterfaceRequest(Replicable app, String value) {
         try {

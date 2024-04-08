@@ -152,7 +152,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
     }
     public DynamoRequestPacket(JSONObject json) throws JSONException{
         super(json);
-        System.out.println("In quorum request packet constructor============================");
+//        System.out.println("In quorum request packet constructor============================");
 
         this.packetType = DynamoPacketType.getDynamoPacketType(json.getInt("type"));
         this.requestID = json.getLong("requestID");
@@ -230,12 +230,13 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
 
     @Override
     public ClientRequest getResponse() {
-        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! getResponse is called!!!!!!!!!!!!");
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! getResponse is called!!!!!!!!!!!!");
 
         DynamoRequestPacket reply = new DynamoRequestPacket(this.requestID,
                 DynamoPacketType.RESPONSE, this);
-        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Response value is "+response+"!!!!!!!!!!!!");
+//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Response value is "+response+"!!!!!!!!!!!!");
         reply.response = this.response;
+        reply.responsePacket  = this.responsePacket;
         return reply;
     }
 

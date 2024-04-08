@@ -15,14 +15,16 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPacket> {
+    private String[] items = new String[]{"table", "chair", "pen"};
+    private int[] ports = new int[]{2000,2001,2002};
     public DynamoClient() throws IOException {
         super();
     }
     @Override
     public Request getRequest(String stringified) throws RequestParseException {
-        System.out.println("In getRequest of client");
+//        System.out.println("In getRequest of client");
         try {
-            System.out.println(stringified);
+//            System.out.println(stringified);
             return new DynamoRequestPacket(new JSONObject(stringified));
         }
         catch (Exception e){
@@ -34,41 +36,55 @@ public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPack
     public Set<IntegerPacketType> getRequestTypes() {
         return new HashSet<IntegerPacketType>(Arrays.asList(DynamoRequestPacket.DynamoPacketType.values()));
     }
-    public static void main(String[] args) throws IOException, InterruptedException{
-        DynamoClient dynamoClient = new DynamoClient();
-        DynamoRequestPacket request;
+    public static DynamoRequestPacket makePutRequest(DynamoClient dc){
+        int randomNum = (int)(Math.random() * ((dc.items.length-1) + 1));
         JSONObject jsonObject = new JSONObject();
+        String putString = dc.items[randomNum];
         try {
-            jsonObject.put("key", "chair");
-            jsonObject.put("value", "2");
+            jsonObject.put("key", putString);
         } catch (JSONException e) {
             throw new RuntimeException(e);
         }
-//        request = new DynamoRequestPacket((long)(Math.random()*Integer.MAX_VALUE),
-//                jsonObject.toString(), DynamoRequestPacket.DynamoPacketType.PUT, DynamoManager.getDefaultServiceName());
-        request = new DynamoRequestPacket((long)(Math.random()*Integer.MAX_VALUE),
-                "Chair", DynamoRequestPacket.DynamoPacketType.GET, DynamoManager.getDefaultServiceName());
-        long reqInitime = System.currentTimeMillis();
-        System.out.println(request);
-        dynamoClient.sendRequest(request ,
-                new InetSocketAddress("localhost", 2000),
-                new Callback<Request, DynamoRequestPacket>() {
+        return new DynamoRequestPacket((long)(Math.random()*Integer.MAX_VALUE),
+                jsonObject.toString(), DynamoRequestPacket.DynamoPacketType.PUT, DynamoManager.getDefaultServiceName());
+    }
+    private static DynamoRequestPacket makeGetRequest(DynamoClient dc){
+        int randomNum = (int)(Math.random() * ((dc.items.length-1) + 1));
+        String getString = dc.items[randomNum];
+        return new DynamoRequestPacket((long)(Math.random()*Integer.MAX_VALUE),
+                getString, DynamoRequestPacket.DynamoPacketType.GET, DynamoManager.getDefaultServiceName());
+    }
+    public static void main(String[] args) throws IOException, InterruptedException{
+        DynamoClient dynamoClient = new DynamoClient();
 
-                    long createTime = System.currentTimeMillis();
-                    @Override
-                    public DynamoRequestPacket processResponse(Request response) {
-                        assert(response instanceof QuorumRequestPacket) :
-                                response.getSummary();
-                        System.out
-                                .println("Response for request ["
-                                        + request.getSummary()
-                                        + "] = "
-                                        + ((DynamoRequestPacket)response).getResponseArrayList()
-                                        + " received in "
-                                        + (System.currentTimeMillis() - createTime)
-                                        + "ms");
-                        return (DynamoRequestPacket) response;
-                    }
-                });
+        for (int i = 0; i < 100; i++) {
+            DynamoRequestPacket request;
+            request = i%2==0 ? makePutRequest(dynamoClient) : makeGetRequest(dynamoClient);
+            long reqInitime = System.currentTimeMillis();
+//            System.out.println(request);
+            dynamoClient.sendRequest(request ,
+                    new InetSocketAddress("localhost", dynamoClient.ports[(int)(Math.random() * ((dynamoClient.ports.length-1) + 1))]),
+                    new Callback<Request, DynamoRequestPacket>() {
+
+                        long createTime = System.currentTimeMillis();
+                        @Override
+                        public DynamoRequestPacket processResponse(Request response) {
+                            assert(response instanceof QuorumRequestPacket) :
+                                    response.getSummary();
+                            System.out
+                                    .println("Response for request ["
+                                            + request.getSummary()
+                                            + " "
+                                            + request.getRequestValue()
+                                            + "] = "
+                                            + ((DynamoRequestPacket)response).getResponseArrayList()
+                                            + " received in "
+                                            + (System.currentTimeMillis() - createTime)
+                                            + "ms");
+                            return (DynamoRequestPacket) response;
+                        }
+                    });
+        }
+
     }
 }
