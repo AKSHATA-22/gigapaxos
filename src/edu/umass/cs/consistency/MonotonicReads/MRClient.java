@@ -1,14 +1,11 @@
 package edu.umass.cs.consistency.MonotonicReads;
 
-import edu.umass.cs.consistency.EventualConsistency.DynamoManager;
-import edu.umass.cs.consistency.EventualConsistency.DynamoRequestPacket;
 import edu.umass.cs.consistency.Quorum.QuorumRequestPacket;
 import edu.umass.cs.gigapaxos.interfaces.Callback;
 import edu.umass.cs.gigapaxos.interfaces.Request;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
 import edu.umass.cs.reconfiguration.ReconfigurableAppClientAsync;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
-import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
@@ -46,9 +43,9 @@ public class MRClient extends ReconfigurableAppClientAsync<MRRequestPacket> {
         return new HashSet<IntegerPacketType>(Arrays.asList(MRRequestPacket.MRPacketType.values()));
     }
     public static MRRequestPacket makeWriteRequest(MRClient mrc){
-        int type = (int)(Math.random() * (mrc.types.length-1));
-        int item = (int)(Math.random() * (mrc.items.length-1));
-        int coord = (int)(Math.random() * (mrc.coords.length-1));
+        int type = (int)(Math.random() * (mrc.types.length));
+        int item = (int)(Math.random() * (mrc.items.length));
+        int coord = (int)(Math.random() * (mrc.coords.length));
         String command = mrc.types[type] + " " + mrc.items[item] + " " + mrc.coords[coord];
         return new MRRequestPacket((long)(Math.random()*Integer.MAX_VALUE), MRRequestPacket.MRPacketType.WRITE, MRManager.getDefaultServiceName(),
                 command, mrc.requestVectorClock, mrc.requestWrites);
@@ -58,20 +55,22 @@ public class MRClient extends ReconfigurableAppClientAsync<MRRequestPacket> {
                 "read_request", mrc.requestVectorClock, mrc.requestWrites);
     }
     public static void updateWrites(MRRequestPacket response, MRClient mrc){
+//        System.out.println("Response: "+response);
         mrc.requestVectorClock = response.getResponseVectorClock();
         for (Timestamp ts: response.getResponseWrites().keySet()){
             mrc.requestWrites.put(ts, response.getResponseWrites().get(ts));
         }
+//        System.out.println("Updated ts: "+mrc.requestVectorClock);
     }
     public static void main(String[] args) throws IOException, InterruptedException{
         MRClient mrClient = new MRClient();
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 10; i++) {
             MRRequestPacket request;
             request = i%2==0 ? makeWriteRequest(mrClient) : makeReadRequest(mrClient);
             long reqInitime = System.currentTimeMillis();
-//            System.out.println(request);
+//            System.out.println("Sending request vc:"+request.getRequestVectorClock());
             mrClient.sendRequest(request ,
-                    new InetSocketAddress("localhost", mrClient.ports[(int)(Math.random() * ((mrClient.ports.length-1) + 1))]),
+                    new InetSocketAddress("localhost", mrClient.ports[(int)(Math.random() * (mrClient.ports.length))]),
                     new Callback<Request, MRRequestPacket>() {
 
                         long createTime = System.currentTimeMillis();
@@ -89,10 +88,12 @@ public class MRClient extends ReconfigurableAppClientAsync<MRRequestPacket> {
                                             + " received in "
                                             + (System.currentTimeMillis() - createTime)
                                             + "ms");
+//                            System.out.println("Response:"+(MRRequestPacket)response);
                             updateWrites(((MRRequestPacket)response), mrClient);
                             return (MRRequestPacket) response;
                         }
                     });
+            Thread.sleep(1000);
         }
 
     }

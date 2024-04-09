@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 
 import edu.umass.cs.consistency.EventualConsistency.DynamoCoordinator;
+import edu.umass.cs.consistency.MonotonicReads.MRCoordinator;
 import edu.umass.cs.consistency.Quorum.QuorumCoordinator;
 import edu.umass.cs.consistency.lazyReplication.LazyReplicationCoordinator;
 import edu.umass.cs.nio.NIOTransport;
@@ -227,6 +228,8 @@ public abstract class ReconfigurableNode<NodeIDType> {
 			return new QuorumCoordinator<>(app, myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
 		else if (coordinatorClassName.equals("edu.umass.cs.consistency.EventualConsistency.DynamoCoordinator"))
 			return new DynamoCoordinator<>(app, myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
+		else if (coordinatorClassName.equals("edu.umass.cs.consistency.MonotonicReads.MRCoordinator"))
+			return new MRCoordinator<>(app, myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
 		return null;
 
 		// FIXME: instantiating {@link ReplicaCoordinator} with Generic type

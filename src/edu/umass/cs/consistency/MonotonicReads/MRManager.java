@@ -1,7 +1,6 @@
 package edu.umass.cs.consistency.MonotonicReads;
 
 import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
-import edu.umass.cs.consistency.EventualConsistency.DynamoApp;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
@@ -52,17 +51,27 @@ public class MRManager<NodeIDType> {
     public static class Write{
         private String statement;
         private Timestamp ts;
-        Write(Timestamp ts, String statement){
+        private int node;
+        Write(Timestamp ts, String statement, int node){
             this.statement = statement;
             this.ts = ts;
+            this.node = node;
         }
 //        write a toString for this class
+        @Override
+        public String toString(){
+            return this.ts.toString() + " " + this.statement;
+        }
         public String getStatement(){
             return this.statement;
         }
 
         public Timestamp getTs() {
             return ts;
+        }
+
+        public int getNode() {
+            return node;
         }
     }
     class WriteComparator implements Comparator<Write>{
@@ -82,7 +91,7 @@ public class MRManager<NodeIDType> {
         PriorityQueue<Write> pq = new PriorityQueue<Write>(new WriteComparator());
 
         MRRequestAndCallback(MRRequestPacket mrRequestPacket, ExecutedCallback callback){
-            this.mrRequestPacket = mrRequestPacket;
+            this.mrRequestPacket = new MRRequestPacket(mrRequestPacket.getRequestID(), mrRequestPacket.getPacketType(), mrRequestPacket);
             this.callback = callback;
         }
 
@@ -93,13 +102,17 @@ public class MRManager<NodeIDType> {
         public boolean ackReceived(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
             removeReqFromSet(mrRequestPacket.getSource());
             for (Timestamp key: mrRequestPacket.getResponseWrites().keySet()){
-                pq.add(new Write(key, mrRequestPacket.getResponseWrites().get(key)));
+                pq.add(new Write(key, mrRequestPacket.getResponseWrites().get(key), mrRequestPacket.getSource()));
                 mrRequestPacket.addResponseWrites(key, mrRequestPacket.getResponseWrites().get(key));
             }
             if (this.requestSent.isEmpty()){
                 return true;
             }
             return false;
+        }
+        public boolean isWrite(){
+            System.out.println("isWrite: "+this.mrRequestPacket.getPacketType()+(this.mrRequestPacket.getPacketType() == MRRequestPacket.MRPacketType.WRITE));
+            return this.mrRequestPacket.getPacketType() == MRRequestPacket.MRPacketType.WRITE;
         }
         public void addCurrentIfNeeded(Timestamp ts){
             if(this.mrRequestPacket.getPacketType() == MRRequestPacket.MRPacketType.WRITE){
@@ -122,6 +135,11 @@ public class MRManager<NodeIDType> {
         }
         public MRRequestPacket getMrRequestPacket() {
             return this.mrRequestPacket;
+        }
+
+        public Integer getRequestSentLength() {
+            System.out.println(this.requestSent);
+            return requestSent.size();
         }
     }
     private void handlePacket(MRRequestPacket qp, MRReplicatedStateMachine mrsm, ExecutedCallback callback){
@@ -147,37 +165,66 @@ public class MRManager<NodeIDType> {
 
     }
     private void handleReadRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm, ExecutedCallback callback){
+        System.out.println("Read received: ---"+mrRequestPacket);
         this.requestsReceived.putIfAbsent(mrRequestPacket.getRequestID(), new MRRequestAndCallback(mrRequestPacket, callback));
-        mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD);
-        for (int i = 0; i < mrsm.getMembers().size(); i++){
-            if ( mrRequestPacket.getRequestVectorClock().get(i).compareTo(this.wvc.get(mrsm.getServiceName()).get(i)) > 0){
-                mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(i));
-                mrRequestPacket.setWritesTo(mrRequestPacket.getRequestVectorClock().get(i));
-                mrRequestPacket.setSource(this.myID);
-                mrRequestPacket.setDestination(mrsm.getMembers().get(i));
-                this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
+        if(!mrRequestPacket.getRequestVectorClock().isEmpty()){
+            mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD);
+            for (int i = 0; i < mrsm.getMembers().size(); i++) {
+                if (mrsm.getMembers().get(i) != this.myID & mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)).compareTo(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i))) > 0) {
+                    mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
+                    mrRequestPacket.setWritesTo(mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)));
+                    mrRequestPacket.setSource(this.myID);
+                    System.out.println("Getting writes from "+mrsm.getMembers().get(i));
+                    mrRequestPacket.setDestination(mrsm.getMembers().get(i));
+                    this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getDestination());
+                    this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
+                }
             }
+//            System.out.println(this.requestsReceived.get(mrRequestPacket.getRequestID()).getRequestSentLength());
+        }
+        if(mrRequestPacket.getRequestVectorClock().isEmpty() || this.requestsReceived.get(mrRequestPacket.getRequestID()).getRequestSentLength() == 0) {
+            System.out.println("Request vector clock is empty");
+            mrRequestPacket.setResponseVectorClock(this.wvc.get(mrsm.getServiceName()));
+            mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
+            mrRequestPacket.setSource(this.myID);
+            this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getSource());
+            handlePacket(mrRequestPacket, mrsm, callback);
         }
     }
     private void handleWriteRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm, ExecutedCallback callback){
+        System.out.println("Write received:---"+mrRequestPacket);
         this.requestsReceived.putIfAbsent(mrRequestPacket.getRequestID(), new MRRequestAndCallback(mrRequestPacket, callback));
-        mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
-        for (int i = 0; i < mrsm.getMembers().size(); i++){
-            if (mrRequestPacket.getRequestVectorClock().get(i).compareTo(this.wvc.get(mrsm.getServiceName()).get(i)) > 0){
-                mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(i));
-                mrRequestPacket.setSource(this.myID);
-                mrRequestPacket.setDestination(mrsm.getMembers().get(i));
-                this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
+        if(!mrRequestPacket.getRequestVectorClock().isEmpty()) {
+            mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD);
+            for (int i = 0; i < mrsm.getMembers().size(); i++) {
+                if (mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)).compareTo(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i))) > 0) {
+                    mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
+                    mrRequestPacket.setSource(this.myID);
+                    mrRequestPacket.setDestination(mrsm.getMembers().get(i));
+                    this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getDestination());
+                    this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
+                }
             }
         }
+        if (mrRequestPacket.getRequestVectorClock().isEmpty() || this.requestsReceived.get(mrRequestPacket.getRequestID()).getRequestSentLength() == 0) {
+                mrRequestPacket.setResponseVectorClock(this.wvc.get(mrsm.getServiceName()));
+                mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
+                mrRequestPacket.setSource(this.myID);
+                this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getSource());
+                this.handlePacket(mrRequestPacket, mrsm, callback);
+        }
+
     }
     private void handleFwdRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
         mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
-        if (mrRequestPacket.getWritesTo() == null){
+        if (mrRequestPacket.getWritesTo().equals(new Timestamp(0))){
             mrRequestPacket.setWritesTo(new Timestamp(System.currentTimeMillis()));
         }
+        System.out.println("handle forward received:---"+mrRequestPacket);
         for (Write write: this.writesByServer.get(mrsm.getServiceName())){
-            if((write.getTs().compareTo(mrRequestPacket.getWritesFrom()) > 0) & (write.getTs().compareTo(mrRequestPacket.getWritesTo()) < 0)){
+            System.out.println("------------------------------------"+write);
+            if((write.getTs().compareTo(mrRequestPacket.getWritesFrom()) >= 0) & (write.getTs().compareTo(mrRequestPacket.getWritesTo()) <= 0)){
+                System.out.println("Executing: "+write.getStatement());
                 mrRequestPacket.addResponseWrites(write.getTs(), write.getStatement());
             }
         }
@@ -187,27 +234,35 @@ public class MRManager<NodeIDType> {
         this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
     }
     private void handleFwdAck(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
+        System.out.println("handle forward ack received:--"+mrRequestPacket);
         if(this.requestsReceived.get(mrRequestPacket.getRequestID()).ackReceived(mrRequestPacket, mrsm)){
             for (Write write : this.requestsReceived.get(mrRequestPacket.getRequestID()).getPq()){
                 mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.WRITE);
                 mrRequestPacket.setRequestValue(write.getStatement());
+                this.wvc.get(mrsm.getServiceName()).put(write.getNode(), write.getTs());
                 Request request = getInterfaceRequest(this.myApp, mrRequestPacket.toString());
                 this.myApp.execute(request, false);
             }
         }
         Timestamp ts = new Timestamp(System.currentTimeMillis());
-        this.wvc.get(mrsm.getServiceName()).put(this.myID, ts);
+        System.out.println("after execution: "+this.wvc.get(mrsm.getServiceName()));
         this.requestsReceived.get(mrRequestPacket.getRequestID()).addCurrentIfNeeded(ts);
-        Request request = getInterfaceRequest(this.myApp, this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket().getRequestValue());
+        Request request = getInterfaceRequest(this.myApp, this.requestsReceived.get(mrRequestPacket.getRequestID()).toString());
         this.myApp.execute(request, false);
         assert request != null;
+        if (this.requestsReceived.get(mrRequestPacket.getRequestID()).isWrite()) {
+            if(((MRRequestPacket)request).getResponseValue().equals("EXECUTED")) {
+                this.wvc.get(mrsm.getServiceName()).put(this.myID, ts);
+                this.writesByServer.get(mrsm.getServiceName()).add(new Write(ts, mrRequestPacket.getRequestValue(), this.myID));
+            }
+        }
         this.requestsReceived.get(mrRequestPacket.getRequestID()).setResponse(this.wvc.get(mrsm.getServiceName()), ((MRRequestPacket)request).getResponseValue());
         sendResponse(mrRequestPacket.getRequestID(), this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket());
     }
     public void sendResponse(Long requestID, MRRequestPacket mrResponsePacket){
         MRRequestAndCallback requestAndCallback = this.requestsReceived.get(requestID);
         if (requestAndCallback != null && requestAndCallback.callback != null) {
-
+            System.out.println("Sending resp packet: "+mrResponsePacket);
             requestAndCallback.callback.executed(mrResponsePacket
                     , true);
             this.requestsReceived.remove(requestID);
@@ -222,6 +277,7 @@ public class MRManager<NodeIDType> {
     private void sendRequest(MRRequestPacket mrRequestPacket,
                              int nodeID){
         GenericMessagingTask<NodeIDType,?> gTask = null;
+        System.out.println("sending req:--"+mrRequestPacket+" to node "+nodeID);
         try {
             // forward to nodeID
             gTask = new GenericMessagingTask(this.integerMap.get(nodeID),
@@ -255,7 +311,7 @@ public class MRManager<NodeIDType> {
                     this.integerMap.put(nodes), app != null ? app : this.myApp,
                     initialState, this);
             serviceNames.add(serviceName);
-            System.out.println("Creating new Replicated Quorum State Machine: "+ mrrsm);
+            System.out.println("Creating new Replicated Monotonic Reads State Machine: "+ mrrsm);
         } catch (Exception e) {
             e.printStackTrace();
             throw new ReplicatedChainException(e.getMessage());
@@ -264,6 +320,7 @@ public class MRManager<NodeIDType> {
         this.putInstance(serviceName, mrrsm);
         this.integerMap.put(nodes);
         this.putVectorClock(serviceName, mrrsm);
+        this.initializeWriteSet(serviceName);
         return mrrsm;
     }
     public boolean deleteReplicatedQuorum(String serviceName, int epoch){
@@ -316,6 +373,9 @@ public class MRManager<NodeIDType> {
             this.wvc.get(serviceName).put(mrrsm.getMembers().get(i), new Timestamp(0));
         }
         System.out.println("wvc initialized: "+ this.wvc);
+    }
+    public void initializeWriteSet(String serviceName){
+        this.writesByServer.put(serviceName, new ArrayList<>());
     }
     private boolean removeInstance(String serviceName) {
         return this.replicatedSM.remove(serviceName) != null;

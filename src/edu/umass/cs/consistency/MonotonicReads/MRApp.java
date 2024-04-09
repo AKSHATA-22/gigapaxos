@@ -50,7 +50,7 @@ public class MRApp implements Replicable {
                     }
                     else {
                         this.board.put(reqArray[1], reqArray[2]);
-                        ((MRRequestPacket) request).setResponseValue(this.board+"");
+                        ((MRRequestPacket) request).setResponseValue("EXECUTED");
                     }
                 }
                 catch (Exception e){

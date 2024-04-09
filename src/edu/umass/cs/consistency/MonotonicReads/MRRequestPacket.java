@@ -8,6 +8,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.net.InetSocketAddress;
+import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -21,9 +22,9 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
     private HashMap<Integer, Timestamp> responseVectorClock = new HashMap<Integer, Timestamp>();
     private HashMap<Timestamp, String> requestWrites = new HashMap<>();
     private HashMap<Timestamp, String> responseWrites = new HashMap<>();
-    private String responseValue = null;
-    private Timestamp writesTo = null;
-    private Timestamp writesFrom = null;
+    private String responseValue = "";
+    private Timestamp writesTo = new Timestamp(0);
+    private Timestamp writesFrom = new Timestamp(0);
     private int destination = -1;
     private int source = -1;
     private InetSocketAddress clientSocketAddress = null;
@@ -69,33 +70,39 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         JSONObject reqVC = jsonObject.getJSONObject("requestVectorClock");
         if (reqVC.length() != 0) {
             for (Iterator it = reqVC.keys(); it.hasNext(); ) {
-                int i = Integer.parseInt(it.next().toString());
-                this.requestVectorClock.put(i, new Timestamp(reqVC.getLong(String.valueOf(i))));
+                String i = it.next().toString();
+                this.requestVectorClock.put(Integer.parseInt(i), Timestamp.valueOf(reqVC.getString(i)));
             }
         }
         JSONObject resVC = jsonObject.getJSONObject("responseVectorClock");
+//        System.out.println("Converting: "+jsonObject.getJSONObject("responseVectorClock"));
+//        System.out.println(resVC.length());
         if (resVC.length() != 0) {
-            for (Iterator it = reqVC.keys(); it.hasNext(); ) {
-                int i = Integer.parseInt(it.next().toString());
-                this.responseVectorClock.put(i, new Timestamp(resVC.getLong(String.valueOf(i))));
+//            System.out.println("resVC: "+ resVC);
+            for (Iterator it = resVC.keys(); it.hasNext(); ) {
+//                System.out.println(it);
+                String i = it.next().toString();
+//                System.out.println(Integer.parseInt(i)+" "+ Timestamp.valueOf(resVC.getString(i)));
+                this.responseVectorClock.put(Integer.parseInt(i), Timestamp.valueOf(resVC.getString(i)));
             }
         }
+//        System.out.println("Converted: "+this.responseVectorClock);
         JSONObject reqW = jsonObject.getJSONObject("requestWrites");
         if (reqW.length() != 0) {
             for (Iterator it = reqW.keys(); it.hasNext(); ) {
                 String i = it.next().toString();
-                this.requestWrites.put(new Timestamp(Long.parseLong(i)), reqW.getString(i));
+                this.requestWrites.put(Timestamp.valueOf(String.valueOf(i)), reqW.getString(i));
             }
         }
         JSONObject resW = jsonObject.getJSONObject("responseWrites");
         if (resW.length() != 0) {
             for (Iterator it = resW.keys(); it.hasNext(); ) {
                 String i = it.next().toString();
-                this.responseWrites.put(new Timestamp(Long.parseLong(i)), resW.getString(i));
+                this.responseWrites.put(Timestamp.valueOf(String.valueOf(i)), resW.getString(i));
             }
         }
-        this.setWritesTo(new Timestamp(Long.parseLong(jsonObject.getString("writesTo"))));
-        this.setWritesFrom(new Timestamp(Long.parseLong(jsonObject.getString("writesFrom"))));
+        this.setWritesTo(Timestamp.valueOf(jsonObject.getString("writesTo")));
+        this.setWritesFrom(Timestamp.valueOf(jsonObject.getString("writesFrom")));
         this.setDestination(jsonObject.getInt("destination"));
         this.setSource(jsonObject.getInt("source"));
     }
@@ -176,7 +183,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
     }
 
     public HashMap<Timestamp, String> getResponseWrites() {
-        return responseWrites;
+        return this.responseWrites;
     }
 
     public void setResponseWrites(HashMap<Timestamp, String> responseWrites) {
@@ -243,6 +250,8 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
 //        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Response value is "+response+"!!!!!!!!!!!!");
         reply.responseValue = this.responseValue;
         reply.responseVectorClock  = this.responseVectorClock;
+        reply.responseWrites = this.responseWrites;
+        System.out.println("Respnse:------------"+this.responseVectorClock);
         return reply;
     }
 
@@ -269,6 +278,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         jsonObject.put("serviceName", this.serviceName);
         jsonObject.put("responseValue", this.responseValue);
         jsonObject.put("requestVectorClock", this.requestVectorClock);
+//        System.out.println("Before converting: "+this.responseVectorClock);
         jsonObject.put("responseVectorClock", this.responseVectorClock);
         jsonObject.put("requestWrites", this.requestWrites);
         jsonObject.put("responseWrites", this.responseWrites);
@@ -280,9 +290,17 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         jsonObject.put("type", this.packetType.getInt());
         return jsonObject;
     }
-
     @Override
     public boolean needsCoordination() {
         return true;
+    }
+    @Override
+    public String toString() {
+        try {
+            return this.toJSONObjectImpl().toString();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 }
