@@ -1,7 +1,6 @@
 package edu.umass.cs.consistency.MonotonicReads;
 
 import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
-import edu.umass.cs.gigapaxos.PaxosConfig;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
@@ -10,14 +9,11 @@ import edu.umass.cs.gigapaxos.paxosutil.LargeCheckpointer;
 import edu.umass.cs.gigapaxos.paxosutil.PaxosMessenger;
 import edu.umass.cs.nio.GenericMessagingTask;
 import edu.umass.cs.nio.interfaces.InterfaceNIOTransport;
-import edu.umass.cs.nio.interfaces.NodeConfig;
 import edu.umass.cs.nio.interfaces.Stringifiable;
 import edu.umass.cs.reconfiguration.ReconfigurationConfig;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
 import org.json.JSONException;
 import org.json.JSONObject;
-
-import java.net.InetAddress;
 import java.sql.Timestamp;
 import java.util.*;
 import java.util.logging.Level;
@@ -27,14 +23,14 @@ public class MRManager<NodeIDType> {
     private final PaxosMessenger<NodeIDType> messenger; // messaging
     private final int myID;
     private final Replicable myApp;
-//    private final FailureDetection<NodeIDType> FD;
+    private final FailureDetection<NodeIDType> FD;
     private final HashMap<String, MRReplicatedStateMachine> replicatedSM = new HashMap<>();
     private final HashMap<String, ArrayList<Write>> writesByServer = new HashMap<>();
     private final HashMap<String, HashMap<Integer, Timestamp>> wvc = new HashMap<>();
     private HashMap<Long, MRRequestAndCallback> requestsReceived = new HashMap<Long, MRRequestAndCallback>();
     private ArrayList<String> serviceNames = new ArrayList<String>();
     private final IntegerMap<NodeIDType> integerMap = new IntegerMap<NodeIDType>();
-    private final Stringifiable<NodeIDType> unstringer;
+    public final Stringifiable<NodeIDType> unstringer;
     private final LargeCheckpointer largeCheckpointer;
     private static final Logger log = Logger.getLogger(ReconfigurationConfig.class.getName());
     public static final Class<?> application = MRApp.class;
@@ -51,7 +47,7 @@ public class MRManager<NodeIDType> {
         this.myApp = LargeCheckpointer.wrap(instance, largeCheckpointer);
 
         this.messenger = (new PaxosMessenger<NodeIDType>(niot, this.integerMap));
-//        this.FD = new FailureDetection<>(id, niot, null);
+        this.FD = new FailureDetection<>(id, niot, null);
 
     }
     public static class Write{
@@ -120,7 +116,7 @@ public class MRManager<NodeIDType> {
         public boolean ackReceived(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
             removeReqFromSet(mrRequestPacket.getSource());
             if(!mrRequestPacket.getResponseWrites().isEmpty()) {
-                pq.addAll(mrRequestPacket.getResponseWrites().get(mrRequestPacket.getSource()));
+                this.addWrites(mrRequestPacket.getResponseWrites().get(mrRequestPacket.getSource()));
             }
             if (this.requestSent.isEmpty()){
                 return true;
@@ -150,6 +146,9 @@ public class MRManager<NodeIDType> {
         public PriorityQueue<Write> getPq() {
             return this.pq;
         }
+        public void addWrites(ArrayList<Write> arrayListToAdd){
+            this.pq.addAll(arrayListToAdd);
+        }
         public MRRequestPacket getMrRequestPacket() {
             return this.mrRequestPacket;
         }
@@ -176,9 +175,9 @@ public class MRManager<NodeIDType> {
             case FWD_ACK:
                 handleFwdAck(qp, mrsm);
                 break;
-//            case FAILURE_DETECT:
-//                processFailureDetection((FailureDetectionPacket<NodeIDType>) qp);
-//                break;
+            case FAILURE_DETECT:
+                processFailureDetection(qp);
+                break;
             default:
                 break;
         }
@@ -191,13 +190,17 @@ public class MRManager<NodeIDType> {
             mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD);
             for (int i = 0; i < mrsm.getMembers().size(); i++) {
                 if (mrsm.getMembers().get(i) != this.myID & mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)).compareTo(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i))) > 0) {
-                    mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
-                    mrRequestPacket.setWritesTo(mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)));
-                    mrRequestPacket.setSource(this.myID);
-                    System.out.println("Getting writes from "+mrsm.getMembers().get(i));
-                    mrRequestPacket.setDestination(mrsm.getMembers().get(i));
-                    this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getDestination());
-                    this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
+                    if (!isNodeUp(mrsm.getMembers().get(i))){
+                        this.requestsReceived.get(mrRequestPacket.getRequestID()).addWrites(mrRequestPacket.getRequestWrites().get(mrsm.getMembers().get(i)));
+                    }
+                    else {
+                        mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
+                        mrRequestPacket.setWritesTo(mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)));
+                        mrRequestPacket.setSource(this.myID);
+                        mrRequestPacket.setDestination(mrsm.getMembers().get(i));
+                        this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getDestination());
+                        this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
+                    }
                 }
             }
 //            System.out.println(this.requestsReceived.get(mrRequestPacket.getRequestID()).getRequestSentLength());
@@ -218,11 +221,16 @@ public class MRManager<NodeIDType> {
             mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD);
             for (int i = 0; i < mrsm.getMembers().size(); i++) {
                 if (mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)).compareTo(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i))) > 0) {
-                    mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
-                    mrRequestPacket.setSource(this.myID);
-                    mrRequestPacket.setDestination(mrsm.getMembers().get(i));
-                    this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getDestination());
-                    this.sendRequest(new MRRequestPacket(mrRequestPacket.getRequestID(), mrRequestPacket.getPacketType(), mrRequestPacket), mrRequestPacket.getDestination());
+                    if (!isNodeUp(mrsm.getMembers().get(i))){
+                        this.requestsReceived.get(mrRequestPacket.getRequestID()).addWrites(mrRequestPacket.getRequestWrites().get(mrsm.getMembers().get(i)));
+                    }
+                    else {
+                        mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
+                        mrRequestPacket.setSource(this.myID);
+                        mrRequestPacket.setDestination(mrsm.getMembers().get(i));
+                        this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getDestination());
+                        this.sendRequest(new MRRequestPacket(mrRequestPacket.getRequestID(), mrRequestPacket.getPacketType(), mrRequestPacket), mrRequestPacket.getDestination());
+                    }
                 }
             }
         }
@@ -236,7 +244,7 @@ public class MRManager<NodeIDType> {
 
     }
     private void handleFwdRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
-//        this.heardFrom(mrRequestPacket.getSource());
+        this.heardFrom(mrRequestPacket.getSource());
         mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
         if (mrRequestPacket.getWritesTo().equals(new Timestamp(0))){
             mrRequestPacket.setWritesTo(new Timestamp(System.currentTimeMillis()));
@@ -255,7 +263,7 @@ public class MRManager<NodeIDType> {
         this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
     }
     private void handleFwdAck(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
-//        this.heardFrom(mrRequestPacket.getSource());
+        this.heardFrom(mrRequestPacket.getSource());
         System.out.println("handle forward ack received:--"+mrRequestPacket);
         if(this.requestsReceived.get(mrRequestPacket.getRequestID()).ackReceived(mrRequestPacket, mrsm)){
             for (Write write : this.requestsReceived.get(mrRequestPacket.getRequestID()).getPq()){
@@ -281,9 +289,15 @@ public class MRManager<NodeIDType> {
             sendResponse(mrRequestPacket.getRequestID(), this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket());
         }
     }
-//    private void processFailureDetection(FailureDetectionPacket<NodeIDType> request) {
-//        FD.receive((FailureDetectionPacket<NodeIDType>) request);
-//    }
+    private void processFailureDetection(MRRequestPacket request) {
+        try {
+            FailureDetectionPacket<NodeIDType> failureDetectionPacket = new FailureDetectionPacket<>(new JSONObject(request.getRequestValue()), this.unstringer);
+            FD.receive(failureDetectionPacket);
+        }
+        catch (Exception e){
+            System.out.println("Exception: "+e);
+        }
+    }
     public void sendResponse(Long requestID, MRRequestPacket mrResponsePacket){
         MRRequestAndCallback requestAndCallback = this.requestsReceived.get(requestID);
         if (requestAndCallback != null && requestAndCallback.callback != null) {
@@ -346,7 +360,7 @@ public class MRManager<NodeIDType> {
 
         this.putInstance(serviceName, mrrsm);
         this.integerMap.put(nodes);
-//        this.FD.sendKeepAlive(nodes);
+        this.FD.sendKeepAlive(nodes);
         this.putVectorClock(serviceName, mrrsm);
         this.initializeWriteSet(serviceName);
         return mrrsm;
@@ -364,7 +378,7 @@ public class MRManager<NodeIDType> {
                           ExecutedCallback callback) {
         System.out.println(request+"");
         if(request.getRequestType() == MRRequestPacket.MRPacketType.FAILURE_DETECT){
-            this.handlePacket((FailureDetectionPacket)request, null, callback);
+            this.handlePacket((MRRequestPacket)request, null, callback);
             return null;
         }
         MRRequestPacket mrRequestPacket = this.getMRRequestPacket(request);
@@ -428,21 +442,21 @@ public class MRManager<NodeIDType> {
     public static final String getDefaultServiceName() {
         return application.getSimpleName() + "0";
     }
-//    protected void heardFrom(int id) {
-//        System.out.println(this.myID+" heard from: "+id);
-//        try {
-//            this.FD.heardFrom(this.integerMap.get(id));
-//        } catch (RuntimeException re) {
-//            // do nothing, can happen during recovery
-//            System.out.println(re.toString());
-//        }
-//    }
-//    protected boolean isNodeUp(int id) {
-//        return (FD != null ? FD.isNodeUp(this.integerMap.get(id)) : false);
-//    }
-//
-//    protected long getDeadTime(int id) {
-//        return (FD != null ? FD.getDeadTime(this.integerMap.get(id)) : System
-//                .currentTimeMillis());
-//    }
+    protected void heardFrom(int id) {
+        System.out.println(this.myID+" heard from: "+id);
+        try {
+            this.FD.heardFrom(this.integerMap.get(id));
+        } catch (RuntimeException re) {
+            // do nothing, can happen during recovery
+            System.out.println(re.toString());
+        }
+    }
+    protected boolean isNodeUp(int id) {
+        return (FD != null ? FD.isNodeUp(this.integerMap.get(id)) : false);
+    }
+
+    protected long getDeadTime(int id) {
+        return (FD != null ? FD.getDeadTime(this.integerMap.get(id)) : System
+                .currentTimeMillis());
+    }
 }

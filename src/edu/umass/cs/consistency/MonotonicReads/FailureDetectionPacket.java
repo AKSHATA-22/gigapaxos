@@ -59,6 +59,7 @@ public class FailureDetectionPacket<NodeIDType> extends MRRequestPacket {
         json.putOpt(FailureDetectionPacket.Keys.SADDR.toString(), this.saddr);
         json.put("type", this.getPacketType().getInt());
         json.put("requestID", this.getRequestID());
+        json.put("serviceName", MRManager.getDefaultServiceName());
         return json;
     }
 

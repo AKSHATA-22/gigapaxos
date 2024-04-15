@@ -67,8 +67,8 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         super(jsonObject);
         this.requestID = jsonObject.getLong("requestID");
         this.setPacketType(MRPacketType.getMRPacketType(jsonObject.getInt("type")));
-        if (jsonObject.has("serviceName")){
-            this.setServiceName(jsonObject.getString("serviceName"));
+        this.setServiceName(jsonObject.getString("serviceName"));
+        if (jsonObject.has("requestVectorClock")){
             this.setRequestValue(jsonObject.getString("requestValue"));
             this.setResponseValue(jsonObject.getString("responseValue"));
             JSONObject reqVC = jsonObject.getJSONObject("requestVectorClock");
@@ -116,9 +116,10 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
             this.setDestination(jsonObject.getInt("destination"));
             this.setSource(jsonObject.getInt("source"));
         }
-//        else{
-//            this = new FailureDetectionPacket(jsonObject);
-//        }
+        else{
+            this.setPacketType(MRPacketType.FAILURE_DETECT);
+            this.setRequestValue(jsonObject.toString());
+        }
     }
     public enum MRPacketType implements IntegerPacketType {
         READ("READ", 1401),
