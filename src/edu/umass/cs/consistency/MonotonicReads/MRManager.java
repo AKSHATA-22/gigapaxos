@@ -1,6 +1,7 @@
 package edu.umass.cs.consistency.MonotonicReads;
 
 import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
+import edu.umass.cs.gigapaxos.PaxosConfig;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
@@ -9,12 +10,14 @@ import edu.umass.cs.gigapaxos.paxosutil.LargeCheckpointer;
 import edu.umass.cs.gigapaxos.paxosutil.PaxosMessenger;
 import edu.umass.cs.nio.GenericMessagingTask;
 import edu.umass.cs.nio.interfaces.InterfaceNIOTransport;
+import edu.umass.cs.nio.interfaces.NodeConfig;
 import edu.umass.cs.nio.interfaces.Stringifiable;
 import edu.umass.cs.reconfiguration.ReconfigurationConfig;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
+import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.sql.Time;
+import java.net.InetAddress;
 import java.sql.Timestamp;
 import java.util.*;
 import java.util.logging.Level;
@@ -24,6 +27,7 @@ public class MRManager<NodeIDType> {
     private final PaxosMessenger<NodeIDType> messenger; // messaging
     private final int myID;
     private final Replicable myApp;
+//    private final FailureDetection<NodeIDType> FD;
     private final HashMap<String, MRReplicatedStateMachine> replicatedSM = new HashMap<>();
     private final HashMap<String, ArrayList<Write>> writesByServer = new HashMap<>();
     private final HashMap<String, HashMap<Integer, Timestamp>> wvc = new HashMap<>();
@@ -47,6 +51,8 @@ public class MRManager<NodeIDType> {
         this.myApp = LargeCheckpointer.wrap(instance, largeCheckpointer);
 
         this.messenger = (new PaxosMessenger<NodeIDType>(niot, this.integerMap));
+//        this.FD = new FailureDetection<>(id, niot, null);
+
     }
     public static class Write{
         private String statement;
@@ -60,7 +66,19 @@ public class MRManager<NodeIDType> {
 //        write a toString for this class
         @Override
         public String toString(){
-            return this.ts.toString() + " " + this.statement;
+            try {
+                return this.toJSONObjectImpl().toString();
+            } catch (JSONException e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        protected JSONObject toJSONObjectImpl() throws JSONException {
+            JSONObject jsonObject = new JSONObject();
+            jsonObject.put("ts", this.ts);
+            jsonObject.put("statement", this.statement);
+            jsonObject.put("node", this.node);
+            return jsonObject;
         }
         public String getStatement(){
             return this.statement;
@@ -101,9 +119,8 @@ public class MRManager<NodeIDType> {
         }
         public boolean ackReceived(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
             removeReqFromSet(mrRequestPacket.getSource());
-            for (Timestamp key: mrRequestPacket.getResponseWrites().keySet()){
-                pq.add(new Write(key, mrRequestPacket.getResponseWrites().get(key), mrRequestPacket.getSource()));
-                mrRequestPacket.addResponseWrites(key, mrRequestPacket.getResponseWrites().get(key));
+            if(!mrRequestPacket.getResponseWrites().isEmpty()) {
+                pq.addAll(mrRequestPacket.getResponseWrites().get(mrRequestPacket.getSource()));
             }
             if (this.requestSent.isEmpty()){
                 return true;
@@ -114,9 +131,9 @@ public class MRManager<NodeIDType> {
             System.out.println("isWrite: "+this.mrRequestPacket.getPacketType()+(this.mrRequestPacket.getPacketType() == MRRequestPacket.MRPacketType.WRITE));
             return this.mrRequestPacket.getPacketType() == MRRequestPacket.MRPacketType.WRITE;
         }
-        public void addCurrentIfNeeded(Timestamp ts){
+        public void addCurrentIfNeeded(Integer nodeID, Timestamp ts){
             if(this.mrRequestPacket.getPacketType() == MRRequestPacket.MRPacketType.WRITE){
-                this.mrRequestPacket.addResponseWrites(ts, this.mrRequestPacket.getRequestValue());
+                this.mrRequestPacket.addResponseWrites(nodeID, ts, this.mrRequestPacket.getRequestValue());
             }
         }
         public void setResponse(HashMap<Integer, Timestamp> responseVectorClock, String responseValue){
@@ -159,6 +176,9 @@ public class MRManager<NodeIDType> {
             case FWD_ACK:
                 handleFwdAck(qp, mrsm);
                 break;
+//            case FAILURE_DETECT:
+//                processFailureDetection((FailureDetectionPacket<NodeIDType>) qp);
+//                break;
             default:
                 break;
         }
@@ -202,7 +222,7 @@ public class MRManager<NodeIDType> {
                     mrRequestPacket.setSource(this.myID);
                     mrRequestPacket.setDestination(mrsm.getMembers().get(i));
                     this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getDestination());
-                    this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
+                    this.sendRequest(new MRRequestPacket(mrRequestPacket.getRequestID(), mrRequestPacket.getPacketType(), mrRequestPacket), mrRequestPacket.getDestination());
                 }
             }
         }
@@ -216,6 +236,7 @@ public class MRManager<NodeIDType> {
 
     }
     private void handleFwdRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
+//        this.heardFrom(mrRequestPacket.getSource());
         mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
         if (mrRequestPacket.getWritesTo().equals(new Timestamp(0))){
             mrRequestPacket.setWritesTo(new Timestamp(System.currentTimeMillis()));
@@ -224,8 +245,8 @@ public class MRManager<NodeIDType> {
         for (Write write: this.writesByServer.get(mrsm.getServiceName())){
             System.out.println("------------------------------------"+write);
             if((write.getTs().compareTo(mrRequestPacket.getWritesFrom()) >= 0) & (write.getTs().compareTo(mrRequestPacket.getWritesTo()) <= 0)){
-                System.out.println("Executing: "+write.getStatement());
-                mrRequestPacket.addResponseWrites(write.getTs(), write.getStatement());
+                System.out.println("Adding to response writes: "+write.getStatement());
+                mrRequestPacket.addResponseWrites(this.myID, write.getTs(), write.getStatement());
             }
         }
         int dest = mrRequestPacket.getDestination();
@@ -234,6 +255,7 @@ public class MRManager<NodeIDType> {
         this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
     }
     private void handleFwdAck(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
+//        this.heardFrom(mrRequestPacket.getSource());
         System.out.println("handle forward ack received:--"+mrRequestPacket);
         if(this.requestsReceived.get(mrRequestPacket.getRequestID()).ackReceived(mrRequestPacket, mrsm)){
             for (Write write : this.requestsReceived.get(mrRequestPacket.getRequestID()).getPq()){
@@ -243,30 +265,34 @@ public class MRManager<NodeIDType> {
                 Request request = getInterfaceRequest(this.myApp, mrRequestPacket.toString());
                 this.myApp.execute(request, false);
             }
-        }
-        Timestamp ts = new Timestamp(System.currentTimeMillis());
-        System.out.println("after execution: "+this.wvc.get(mrsm.getServiceName()));
-        this.requestsReceived.get(mrRequestPacket.getRequestID()).addCurrentIfNeeded(ts);
-        Request request = getInterfaceRequest(this.myApp, this.requestsReceived.get(mrRequestPacket.getRequestID()).toString());
-        this.myApp.execute(request, false);
-        assert request != null;
-        if (this.requestsReceived.get(mrRequestPacket.getRequestID()).isWrite()) {
-            if(((MRRequestPacket)request).getResponseValue().equals("EXECUTED")) {
-                this.wvc.get(mrsm.getServiceName()).put(this.myID, ts);
-                this.writesByServer.get(mrsm.getServiceName()).add(new Write(ts, mrRequestPacket.getRequestValue(), this.myID));
+            Timestamp ts = new Timestamp(System.currentTimeMillis());
+            System.out.println("after execution: "+this.wvc.get(mrsm.getServiceName()));
+            this.requestsReceived.get(mrRequestPacket.getRequestID()).addCurrentIfNeeded(this.myID, ts);
+            Request request = getInterfaceRequest(this.myApp, this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket().toString());
+            this.myApp.execute(request, false);
+            assert request != null;
+            if (this.requestsReceived.get(mrRequestPacket.getRequestID()).isWrite()) {
+                if(((MRRequestPacket)request).getResponseValue().equals("EXECUTED")) {
+                    this.wvc.get(mrsm.getServiceName()).put(this.myID, ts);
+                    this.writesByServer.get(mrsm.getServiceName()).add(new Write(ts, this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket().getRequestValue(), this.myID));
+                }
             }
+            this.requestsReceived.get(mrRequestPacket.getRequestID()).setResponse(this.wvc.get(mrsm.getServiceName()), ((MRRequestPacket)request).getResponseValue());
+            sendResponse(mrRequestPacket.getRequestID(), this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket());
         }
-        this.requestsReceived.get(mrRequestPacket.getRequestID()).setResponse(this.wvc.get(mrsm.getServiceName()), ((MRRequestPacket)request).getResponseValue());
-        sendResponse(mrRequestPacket.getRequestID(), this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket());
     }
+//    private void processFailureDetection(FailureDetectionPacket<NodeIDType> request) {
+//        FD.receive((FailureDetectionPacket<NodeIDType>) request);
+//    }
     public void sendResponse(Long requestID, MRRequestPacket mrResponsePacket){
         MRRequestAndCallback requestAndCallback = this.requestsReceived.get(requestID);
         if (requestAndCallback != null && requestAndCallback.callback != null) {
-            System.out.println("Sending resp packet: "+mrResponsePacket);
+            mrResponsePacket.setPacketType(MRRequestPacket.MRPacketType.RESPONSE);
+            mrResponsePacket.setSource(this.myID);
+//            System.out.println("Sending resp packet: "+mrResponsePacket);
             requestAndCallback.callback.executed(mrResponsePacket
                     , true);
             this.requestsReceived.remove(requestID);
-
         } else {
             // can't find the request being queued in outstanding
             log.log(Level.WARNING, "QuorumManager.handleResponse received " +
@@ -289,6 +315,7 @@ public class MRManager<NodeIDType> {
     }
     private static Request getInterfaceRequest(Replicable app, String value) {
         try {
+//            System.out.println("VALUE--------"+value);
             return app.getRequest(value);
         } catch (RequestParseException e) {
             e.printStackTrace();
@@ -319,6 +346,7 @@ public class MRManager<NodeIDType> {
 
         this.putInstance(serviceName, mrrsm);
         this.integerMap.put(nodes);
+//        this.FD.sendKeepAlive(nodes);
         this.putVectorClock(serviceName, mrrsm);
         this.initializeWriteSet(serviceName);
         return mrrsm;
@@ -334,8 +362,13 @@ public class MRManager<NodeIDType> {
     }
     public String propose(String serviceName, Request request,
                           ExecutedCallback callback) {
-
+        System.out.println(request+"");
+        if(request.getRequestType() == MRRequestPacket.MRPacketType.FAILURE_DETECT){
+            this.handlePacket((FailureDetectionPacket)request, null, callback);
+            return null;
+        }
         MRRequestPacket mrRequestPacket = this.getMRRequestPacket(request);
+
         boolean matched = false;
 
         MRReplicatedStateMachine mrsm = this.getInstance(serviceName);
@@ -346,7 +379,7 @@ public class MRManager<NodeIDType> {
             mrRequestPacket.setServiceName(serviceName);
             this.handlePacket(mrRequestPacket, mrsm, callback);
         } else {
-            System.out.println("The given quorumID has no state machine associated");
+            System.out.println("The given quorumID "+serviceName+" has no state machine associated");
         }
 
 
@@ -395,4 +428,21 @@ public class MRManager<NodeIDType> {
     public static final String getDefaultServiceName() {
         return application.getSimpleName() + "0";
     }
+//    protected void heardFrom(int id) {
+//        System.out.println(this.myID+" heard from: "+id);
+//        try {
+//            this.FD.heardFrom(this.integerMap.get(id));
+//        } catch (RuntimeException re) {
+//            // do nothing, can happen during recovery
+//            System.out.println(re.toString());
+//        }
+//    }
+//    protected boolean isNodeUp(int id) {
+//        return (FD != null ? FD.isNodeUp(this.integerMap.get(id)) : false);
+//    }
+//
+//    protected long getDeadTime(int id) {
+//        return (FD != null ? FD.getDeadTime(this.integerMap.get(id)) : System
+//                .currentTimeMillis());
+//    }
 }

@@ -46,13 +46,13 @@ public class MRCoordinator<NodeIDType>
     }
     @Override
     public boolean coordinateRequest(Request request, ExecutedCallback callback) throws IOException, RequestParseException {
+//        System.out.println();
         return this.mrManager.propose(request.getServiceName(), request, callback)!= null;
     }
 
     @Override
     public boolean createReplicaGroup(String serviceName, int epoch, String state, Set<NodeIDType> nodes) {
         System.out.println(">>>>> Creating replica group of servicename: "+serviceName+", on "+this.getMyID());
-
         return this.mrManager.createReplicatedQuorumForcibly(
                 serviceName, epoch, nodes, this, state);
     }

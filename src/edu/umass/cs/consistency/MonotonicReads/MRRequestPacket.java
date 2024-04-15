@@ -1,15 +1,18 @@
 package edu.umass.cs.consistency.MonotonicReads;
 
 import edu.umass.cs.gigapaxos.interfaces.ClientRequest;
+import edu.umass.cs.gigapaxos.paxospackets.PaxosPacket;
 import edu.umass.cs.nio.JSONPacket;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
 import edu.umass.cs.reconfiguration.interfaces.ReplicableRequest;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.net.InetSocketAddress;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 
@@ -20,8 +23,8 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
     private String serviceName = null;
     private HashMap<Integer, Timestamp> requestVectorClock = new HashMap<Integer, Timestamp>();
     private HashMap<Integer, Timestamp> responseVectorClock = new HashMap<Integer, Timestamp>();
-    private HashMap<Timestamp, String> requestWrites = new HashMap<>();
-    private HashMap<Timestamp, String> responseWrites = new HashMap<>();
+    private HashMap<Integer, ArrayList<MRManager.Write>> requestWrites = new HashMap<>();
+    private HashMap<Integer, ArrayList<MRManager.Write>> responseWrites = new HashMap<>();
     private String responseValue = "";
     private Timestamp writesTo = new Timestamp(0);
     private Timestamp writesFrom = new Timestamp(0);
@@ -30,7 +33,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
     private InetSocketAddress clientSocketAddress = null;
     private MRPacketType packetType;
 
-    public MRRequestPacket(long reqID, MRPacketType reqType, String serviceName, String value, HashMap<Integer, Timestamp> requestVectorClock, HashMap<Timestamp, String> requestWrites){
+    public MRRequestPacket(long reqID, MRPacketType reqType, String serviceName, String value, HashMap<Integer, Timestamp> requestVectorClock, HashMap<Integer, ArrayList<MRManager.Write>> requestWrites){
         super(reqType);
         this.packetType = reqType;
         this.requestID = reqID;
@@ -64,54 +67,66 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         super(jsonObject);
         this.requestID = jsonObject.getLong("requestID");
         this.setPacketType(MRPacketType.getMRPacketType(jsonObject.getInt("type")));
-        this.setServiceName(jsonObject.getString("serviceName"));
-        this.setRequestValue(jsonObject.getString("requestValue"));
-        this.setResponseValue(jsonObject.getString("responseValue"));
-        JSONObject reqVC = jsonObject.getJSONObject("requestVectorClock");
-        if (reqVC.length() != 0) {
-            for (Iterator it = reqVC.keys(); it.hasNext(); ) {
-                String i = it.next().toString();
-                this.requestVectorClock.put(Integer.parseInt(i), Timestamp.valueOf(reqVC.getString(i)));
+        if (jsonObject.has("serviceName")){
+            this.setServiceName(jsonObject.getString("serviceName"));
+            this.setRequestValue(jsonObject.getString("requestValue"));
+            this.setResponseValue(jsonObject.getString("responseValue"));
+            JSONObject reqVC = jsonObject.getJSONObject("requestVectorClock");
+            if (reqVC.length() != 0) {
+                for (Iterator it = reqVC.keys(); it.hasNext(); ) {
+                    String i = it.next().toString();
+                    this.requestVectorClock.put(Integer.parseInt(i), Timestamp.valueOf(reqVC.getString(i)));
+                }
             }
-        }
-        JSONObject resVC = jsonObject.getJSONObject("responseVectorClock");
-//        System.out.println("Converting: "+jsonObject.getJSONObject("responseVectorClock"));
-//        System.out.println(resVC.length());
-        if (resVC.length() != 0) {
-//            System.out.println("resVC: "+ resVC);
-            for (Iterator it = resVC.keys(); it.hasNext(); ) {
-//                System.out.println(it);
-                String i = it.next().toString();
-//                System.out.println(Integer.parseInt(i)+" "+ Timestamp.valueOf(resVC.getString(i)));
-                this.responseVectorClock.put(Integer.parseInt(i), Timestamp.valueOf(resVC.getString(i)));
+            JSONObject resVC = jsonObject.getJSONObject("responseVectorClock");
+            if (resVC.length() != 0) {
+                for (Iterator it = resVC.keys(); it.hasNext(); ) {
+                    String i = it.next().toString();
+                    this.responseVectorClock.put(Integer.parseInt(i), Timestamp.valueOf(resVC.getString(i)));
+                }
             }
-        }
-//        System.out.println("Converted: "+this.responseVectorClock);
-        JSONObject reqW = jsonObject.getJSONObject("requestWrites");
-        if (reqW.length() != 0) {
-            for (Iterator it = reqW.keys(); it.hasNext(); ) {
-                String i = it.next().toString();
-                this.requestWrites.put(Timestamp.valueOf(String.valueOf(i)), reqW.getString(i));
+            JSONObject reqW = jsonObject.getJSONObject("requestWrites");
+            if (reqW.length() != 0) {
+                for (Iterator it = reqW.keys(); it.hasNext(); ) {
+                    String i = it.next().toString();
+                    this.requestWrites.put(Integer.parseInt(i), new ArrayList<>());
+                    JSONArray jsonArray = reqW.getJSONArray(i);
+                    for (int j = 0; j < jsonArray.length(); j++){
+                        JSONObject jsonObject1 = jsonArray.getJSONObject(j);
+                        this.requestWrites.get(Integer.parseInt(i)).add(new MRManager.Write(Timestamp.valueOf(jsonObject1.getString("ts")),
+                                jsonObject1.getString("statement"), Integer.parseInt(jsonObject1.getString("node"))));
+                    }
+                }
             }
-        }
-        JSONObject resW = jsonObject.getJSONObject("responseWrites");
-        if (resW.length() != 0) {
-            for (Iterator it = resW.keys(); it.hasNext(); ) {
-                String i = it.next().toString();
-                this.responseWrites.put(Timestamp.valueOf(String.valueOf(i)), resW.getString(i));
+            JSONObject resW = jsonObject.getJSONObject("responseWrites");
+            if (resW.length() != 0) {
+                for (Iterator it = resW.keys(); it.hasNext(); ) {
+                    String i = it.next().toString();
+                    this.responseWrites.put(Integer.parseInt(i), new ArrayList<>());
+                    JSONArray jsonArray = resW.getJSONArray(i);
+                    for (int j = 0; j < jsonArray.length(); j++){
+                        JSONObject jsonObject1 = jsonArray.getJSONObject(j);
+                        this.responseWrites.get(Integer.parseInt(i)).add(new MRManager.Write(Timestamp.valueOf(jsonObject1.getString("ts")),
+                                jsonObject1.getString("statement"), Integer.parseInt(jsonObject1.getString("node"))));
+                    }
+                }
             }
+            this.setWritesTo(Timestamp.valueOf(jsonObject.getString("writesTo")));
+            this.setWritesFrom(Timestamp.valueOf(jsonObject.getString("writesFrom")));
+            this.setDestination(jsonObject.getInt("destination"));
+            this.setSource(jsonObject.getInt("source"));
         }
-        this.setWritesTo(Timestamp.valueOf(jsonObject.getString("writesTo")));
-        this.setWritesFrom(Timestamp.valueOf(jsonObject.getString("writesFrom")));
-        this.setDestination(jsonObject.getInt("destination"));
-        this.setSource(jsonObject.getInt("source"));
+//        else{
+//            this = new FailureDetectionPacket(jsonObject);
+//        }
     }
     public enum MRPacketType implements IntegerPacketType {
         READ("READ", 1401),
         WRITE("WRITE", 1402),
         FWD("FWD", 1403),
         FWD_ACK("FWD_ACK", 1404),
-        RESPONSE("RESPONSE", 1405),
+        FAILURE_DETECT("FAILURE_DETECT", 1405),
+        RESPONSE("RESPONSE", 1406),
         ;
         String label;
         int number;
@@ -170,27 +185,30 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         return requestVectorClock;
     }
 
-    public void setRequestVectorClock(HashMap<Integer, Timestamp> requestVectorClock) {
-        this.requestVectorClock = requestVectorClock;
-    }
-
-    public HashMap<Timestamp, String> getRequestWrites() {
+    public HashMap<Integer, ArrayList<MRManager.Write>> getRequestWrites() {
         return requestWrites;
     }
 
-    public void setRequestWrites(HashMap<Timestamp, String> requestWrites) {
+    public void setRequestWrites(HashMap<Integer, ArrayList<MRManager.Write>> requestWrites) {
         this.requestWrites = requestWrites;
     }
 
-    public HashMap<Timestamp, String> getResponseWrites() {
-        return this.responseWrites;
+    public HashMap<Integer, ArrayList<MRManager.Write>> getResponseWrites() {
+        return responseWrites;
     }
 
-    public void setResponseWrites(HashMap<Timestamp, String> responseWrites) {
+    public void setResponseWrites(HashMap<Integer, ArrayList<MRManager.Write>> responseWrites) {
         this.responseWrites = responseWrites;
     }
-    public void addResponseWrites(Timestamp ts, String statement) {
-        this.responseWrites.put(ts, statement);
+
+    public void setRequestVectorClock(HashMap<Integer, Timestamp> requestVectorClock) {
+        this.requestVectorClock = requestVectorClock;
+    }
+    public void addResponseWrites(Integer nodeID, Timestamp ts, String statement) {
+        if(!this.responseWrites.containsKey(nodeID)){
+            this.responseWrites.put(nodeID, new ArrayList<>());
+        }
+        this.responseWrites.get(nodeID).add(new MRManager.Write(ts, statement, nodeID));
     }
 
     public Timestamp getWritesTo() {
@@ -251,6 +269,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         reply.responseValue = this.responseValue;
         reply.responseVectorClock  = this.responseVectorClock;
         reply.responseWrites = this.responseWrites;
+        reply.source = this.source;
         System.out.println("Respnse:------------"+this.responseVectorClock);
         return reply;
     }
@@ -280,14 +299,31 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         jsonObject.put("requestVectorClock", this.requestVectorClock);
 //        System.out.println("Before converting: "+this.responseVectorClock);
         jsonObject.put("responseVectorClock", this.responseVectorClock);
-        jsonObject.put("requestWrites", this.requestWrites);
-        jsonObject.put("responseWrites", this.responseWrites);
+        JSONObject reqWrites = new JSONObject();
+        for(Integer i: this.requestWrites.keySet()){
+            JSONArray jsonArray = new JSONArray();
+            for(MRManager.Write write: this.requestWrites.get(i)){
+                jsonArray.put(write.toJSONObjectImpl());
+            }
+            reqWrites.put(String.valueOf(i), jsonArray);
+        }
+        jsonObject.put("requestWrites", reqWrites);
+        JSONObject resWrites = new JSONObject();
+        for(Integer i: this.responseWrites.keySet()){
+            JSONArray jsonArray = new JSONArray();
+            for(MRManager.Write write: this.responseWrites.get(i)){
+                jsonArray.put(write.toJSONObjectImpl());
+            }
+            resWrites.put(String.valueOf(i), jsonArray);
+        }
+        jsonObject.put("responseWrites", resWrites);
         jsonObject.put("writesTo", this.writesTo);
         jsonObject.put("writesFrom", this.writesFrom);
         jsonObject.put("destination", this.destination);
         jsonObject.put("source", this.source);
         jsonObject.put("clientSocketAddress", this.clientSocketAddress);
         jsonObject.put("type", this.packetType.getInt());
+//        jsonObject.put("")
         return jsonObject;
     }
     @Override

@@ -11,17 +11,14 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.sql.Timestamp;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 public class MRClient extends ReconfigurableAppClientAsync<MRRequestPacket> {
-    private String[] types = new String[]{"C", "U"};
+    private String[] types = new String[]{"C"};
     private String[] items = new String[]{"CIRCLE01", "TRIANGLE01", "CIRCLE02", "TRIANGLE02", "CIRCLE03"};
     private String[] coords = new String[]{"1,1", "3,2", "4,4", "9,4", "8,5", "3,7", "6,3", "8,0"};
     private int[] ports = new int[]{2000,2001,2002};
-    private HashMap<Timestamp, String> requestWrites = new HashMap<>();
+    private HashMap<Integer, ArrayList<MRManager.Write>> requestWrites = new HashMap<>();
     private HashMap<Integer, Timestamp> requestVectorClock = new HashMap<Integer, Timestamp>();
     public MRClient() throws IOException {
         super();
@@ -57,10 +54,14 @@ public class MRClient extends ReconfigurableAppClientAsync<MRRequestPacket> {
     public static void updateWrites(MRRequestPacket response, MRClient mrc){
 //        System.out.println("Response: "+response);
         mrc.requestVectorClock = response.getResponseVectorClock();
-        for (Timestamp ts: response.getResponseWrites().keySet()){
-            mrc.requestWrites.put(ts, response.getResponseWrites().get(ts));
+        if (response.getResponseWrites().containsKey(response.getSource())){
+            for (MRManager.Write write : response.getResponseWrites().get(response.getSource())) {
+                if (!mrc.requestWrites.containsKey(response.getSource())) {
+                    mrc.requestWrites.put(response.getSource(), new ArrayList<>());
+                }
+                mrc.requestWrites.get(response.getSource()).add(write);
+            }
         }
-//        System.out.println("Updated ts: "+mrc.requestVectorClock);
     }
     public static void main(String[] args) throws IOException, InterruptedException{
         MRClient mrClient = new MRClient();
