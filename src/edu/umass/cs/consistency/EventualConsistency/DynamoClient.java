@@ -15,8 +15,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPacket> {
-    private String[] items = new String[]{"table", "chair", "pen"};
-    private int[] ports = new int[]{2000,2001,2002};
+    private final String[] items = new String[]{"table", "chair", "pen"};
+    private final int[] ports = new int[]{2000,2001,2002};
     public DynamoClient() throws IOException {
         super();
     }
@@ -34,7 +34,7 @@ public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPack
     }
     @Override
     public Set<IntegerPacketType> getRequestTypes() {
-        return new HashSet<IntegerPacketType>(Arrays.asList(DynamoRequestPacket.DynamoPacketType.values()));
+        return new HashSet<>(Arrays.asList(DynamoRequestPacket.DynamoPacketType.values()));
     }
     public static DynamoRequestPacket makePutRequest(DynamoClient dc){
         int randomNum = (int)(Math.random() * ((dc.items.length-1) + 1));
@@ -57,7 +57,7 @@ public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPack
     public static void main(String[] args) throws IOException, InterruptedException{
         DynamoClient dynamoClient = new DynamoClient();
 
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 10; i++) {
             DynamoRequestPacket request;
             request = i%2==0 ? makePutRequest(dynamoClient) : makeGetRequest(dynamoClient);
             long reqInitime = System.currentTimeMillis();
@@ -77,13 +77,16 @@ public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPack
                                             + " "
                                             + request.getRequestValue()
                                             + "] = "
-                                            + ((DynamoRequestPacket)response).getResponseArrayList()
-                                            + " received in "
-                                            + (System.currentTimeMillis() - createTime)
+                                            + ((DynamoRequestPacket)response).getResponsePacket()
+                                            + " "
+                                            + ((DynamoRequestPacket)response).getTimestamp()
+                                            + " sent at "
+                                            + (createTime)
                                             + "ms");
                             return (DynamoRequestPacket) response;
                         }
                     });
+            Thread.sleep(1000);
         }
 
     }

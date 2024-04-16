@@ -45,6 +45,7 @@ public class DynamoApp implements Replicable {
                     ((DynamoRequestPacket) request).getResponsePacket().setValue(this.cart.get(((DynamoRequestPacket) request).getRequestValue()));
                 }
                 catch (Exception e){
+
                     ((DynamoRequestPacket) request).getResponsePacket().setValue(-1);
                 }
             }

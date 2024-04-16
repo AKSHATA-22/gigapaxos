@@ -80,38 +80,45 @@ public class DynamoManager<NodeIDType> {
         public Integer incrementAck(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
             this.numOfAcksReceived += 1;
             if (qp.getType() == DynamoRequestPacket.DynamoPacketType.GET_ACK){
-                this.reconcile(qp.getResponsePacket().getVectorClock(), qp.getResponsePacket().getValue(), rqsm);
+                System.out.println("GET ACK received----------");
+                this.reconcile(qp.getResponsePacket().getVectorClock(), qp.getResponsePacket().getValue(), rqsm, qp.getTimestamp());
             }
             return this.numOfAcksReceived;
         }
-        public void reconcile(HashMap<Integer, Integer> vectorClock, int value, ReplicatedQuorumStateMachine rqsm){
-            boolean reconciled = false;
-            for (DynamoRequestPacket.DynamoPacket packet :  dynamoRequestPacket.getResponseArrayList()){
+        public void reconcile(HashMap<Integer, Integer> vectorClock, int value, ReplicatedQuorumStateMachine rqsm, Timestamp ts){
+            System.out.println("========================================================"+this.dynamoRequestPacket.getResponsePacket());
+            if (!this.dynamoRequestPacket.getResponsePacket().getVectorClock().isEmpty()){
                 boolean greater = true;
                 boolean smaller = true;
                 for (int i = 0; i < vectorClock.size(); i++) {
-                    if(packet.getVectorClock().get(rqsm.getQuorumMembers().get(i)) > vectorClock.get(rqsm.getQuorumMembers().get(i))){
+                    if(this.dynamoRequestPacket.getResponsePacket().getVectorClock().get(rqsm.getQuorumMembers().get(i)) > vectorClock.get(rqsm.getQuorumMembers().get(i))){
                         greater &= true;
                         smaller &= false;
                     }
-                    else if(packet.getVectorClock().get(rqsm.getQuorumMembers().get(i)) < vectorClock.get(rqsm.getQuorumMembers().get(i))){
+                    else if(this.dynamoRequestPacket.getResponsePacket().getVectorClock().get(rqsm.getQuorumMembers().get(i)) < vectorClock.get(rqsm.getQuorumMembers().get(i))){
                         greater &= false;
                         smaller &= true;
                     }
                 }
                 if (smaller || greater){
                     if (smaller) {
-                        packet.setVectorClock(vectorClock);
-                        packet.setValue(value);
+                        this.dynamoRequestPacket.getResponsePacket().setVectorClock(vectorClock);
+                        this.dynamoRequestPacket.getResponsePacket().setValue(value);
+                        this.dynamoRequestPacket.setTimestamp(ts);
                     }
-                    reconciled = true;
-                    break;
+                }
+                else {
+                    if(this.dynamoRequestPacket.getTimestamp().compareTo(ts) < 0){
+                        this.dynamoRequestPacket.getResponsePacket().setVectorClock(vectorClock);
+                        this.dynamoRequestPacket.getResponsePacket().setValue(value);
+                        this.dynamoRequestPacket.setTimestamp(ts);
+                    }
                 }
             }
-            if (!reconciled){
-                dynamoRequestPacket.addToResponseArrayList(new DynamoRequestPacket.DynamoPacket(vectorClock, value));
+            else {
+                this.dynamoRequestPacket.setResponsePacket(new DynamoRequestPacket.DynamoPacket(vectorClock, value));
+                this.dynamoRequestPacket.setTimestamp(ts);
             }
-
         }
         public Integer getNumOfAcksReceived(){
             return this.numOfAcksReceived;
@@ -158,6 +165,7 @@ public class DynamoManager<NodeIDType> {
         Request request = getInterfaceRequest(this.myApp, qp.toString());
         this.myApp.execute(request, false);
         this.vectorClock.get(rqsm.getQuorumID()).put(this.myID, this.vectorClock.get(rqsm.getQuorumID()).get(this.myID)+1);
+        this.lastWriteTS = new Timestamp(System.currentTimeMillis());
         qp.setRequestVectorClock(this.vectorClock.get(rqsm.getQuorumID()));
         qp.setPacketType(DynamoRequestPacket.DynamoPacketType.PUT_FWD);
 //        Send request to all the quorum members except own
@@ -187,9 +195,10 @@ public class DynamoManager<NodeIDType> {
         if (qp.getRequestVectorClock().get(qp.getSource()) > this.vectorClock.get(rqsm.getQuorumID()).get(qp.getSource())) {
             Request request = getInterfaceRequest(this.myApp, qp.toString());
             this.myApp.execute(request, false);
+            this.reconcileVectorClock(qp.getRequestVectorClock(), rqsm, qp.getSource());
+            this.lastWriteTS = new Timestamp(System.currentTimeMillis());
         }
         qp.setPacketType(DynamoRequestPacket.DynamoPacketType.PUT_ACK);
-        this.reconcileVectorClock(qp.getRequestVectorClock(), rqsm, qp.getSource());
         int dest = qp.getDestination();
         qp.setDestination(qp.getSource());
         qp.setSource(dest);
@@ -201,6 +210,7 @@ public class DynamoManager<NodeIDType> {
         Request request = getInterfaceRequest(this.myApp, qp.toString());
         this.myApp.execute(request, false);
         qp.setPacketType(DynamoRequestPacket.DynamoPacketType.GET_ACK);
+        qp.setTimestamp(this.lastWriteTS);
         int dest = qp.getDestination();
         qp.setDestination(qp.getSource());
         qp.setSource(dest);
@@ -222,6 +232,7 @@ public class DynamoManager<NodeIDType> {
         } else if (qp.getType() == DynamoRequestPacket.DynamoPacketType.GET_ACK) {
             try {
                 if (this.requestsReceived.get(qp.getRequestID()).incrementAck(qp, rqsm) >= rqsm.getReadQuorum()){
+                    System.out.println("sending response for get--------");
                     sendResponse(qp.getRequestID());
                 }
             }
@@ -259,7 +270,7 @@ public class DynamoManager<NodeIDType> {
     }
     private void reconcileVectorClock(HashMap<Integer, Integer> requestClock, ReplicatedQuorumStateMachine rqsm, int node){
         ArrayList<Integer> members = rqsm.getQuorumMembers();
-        this.vectorClock.get(rqsm.getQuorumID()).put(members.get(node), requestClock.get(members.get(node)));
+        this.vectorClock.get(rqsm.getQuorumID()).put(node, requestClock.get(node));
     }
     private static Request getInterfaceRequest(Replicable app, String value) {
         try {

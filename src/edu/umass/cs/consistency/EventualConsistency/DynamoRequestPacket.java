@@ -29,7 +29,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
     private InetSocketAddress clientSocketAddress = null;
     private DynamoPacketType packetType;
     private String quorumID = null;
-    private Timestamp timestamp = null;
+    private Timestamp timestamp = new Timestamp(0);
     static class DynamoPacket{
         HashMap<Integer, Integer> vectorClock = new HashMap<>();
         int value;
