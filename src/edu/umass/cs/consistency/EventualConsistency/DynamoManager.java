@@ -15,6 +15,7 @@ import edu.umass.cs.reconfiguration.ReconfigurationConfig;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
 import org.json.JSONObject;
 
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Set;
@@ -33,6 +34,7 @@ public class DynamoManager<NodeIDType> {
     private final Stringifiable<NodeIDType> unstringer;
     // a map of NodeIDType objects to integers
     private final IntegerMap<NodeIDType> integerMap = new IntegerMap<NodeIDType>();
+    private Timestamp lastWriteTS = new Timestamp(0);
     //    Maps the reqestID to QuorumRequestAndCallback object
     private HashMap<Long, DynamoRequestAndCallback> requestsReceived = new HashMap<Long, DynamoRequestAndCallback>();
     private ArrayList<String> quorums = new ArrayList<String>();
@@ -124,7 +126,7 @@ public class DynamoManager<NodeIDType> {
 
         DynamoRequestPacket.DynamoPacketType packetType = qp.getType();
 
-        switch(packetType) {
+        switch(packetType){
             case PUT:
                 // client -> node
                 handlePutRequest(qp, rqsm, callback);

@@ -20,7 +20,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class MRManager<NodeIDType> {
-    private final PaxosMessenger<NodeIDType> messenger; // messaging
+    private final PaxosMessenger<NodeIDType> messenger;
     private final int myID;
     private final Replicable myApp;
     private final FailureDetection<NodeIDType> FD;
@@ -50,6 +50,9 @@ public class MRManager<NodeIDType> {
         this.FD = new FailureDetection<>(id, niot, null);
 
     }
+    /**
+    This class is used to represent a write.
+     **/
     public static class Write{
         private String statement;
         private Timestamp ts;
@@ -88,6 +91,10 @@ public class MRManager<NodeIDType> {
             return node;
         }
     }
+
+    /**
+     * Comparator for the Priority queue that consists of objects of type Write
+     */
     class WriteComparator implements Comparator<Write>{
         public int compare(Write w1, Write w2) {
             int compare = w1.ts.compareTo(w2.ts);
@@ -98,6 +105,15 @@ public class MRManager<NodeIDType> {
             return 0;
         }
     }
+
+    /**
+     * Maps the request to the appropriate callback.
+     * Fields:
+     * 1. mrRequestPacket - Original request packet
+     * 2. callback - Associated callback
+     * 3. requestSent - Set of nodes to which a request is sent
+     * 4. pq - priority queue which will contain all the response writes ordered by their timestamp
+     */
     public class MRRequestAndCallback {
         protected MRRequestPacket mrRequestPacket;
         final ExecutedCallback callback;
@@ -113,6 +129,7 @@ public class MRManager<NodeIDType> {
         public String toString(){
             return this.mrRequestPacket +" ["+ callback+"]";
         }
+//        Once an ack is received the response writes are added to the priority queue. Return true if the requestSent set is empty.
         public boolean ackReceived(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
             removeReqFromSet(mrRequestPacket.getSource());
             if(!mrRequestPacket.getResponseWrites().isEmpty()) {
@@ -183,6 +200,13 @@ public class MRManager<NodeIDType> {
         }
 
     }
+
+    /**
+     * If the vector clock of the request is greater gets the writes in that time, else handles the request as an ack
+     * @param mrRequestPacket
+     * @param mrsm
+     * @param callback
+     */
     private void handleReadRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm, ExecutedCallback callback){
         System.out.println("Read received: ---"+mrRequestPacket);
         this.requestsReceived.putIfAbsent(mrRequestPacket.getRequestID(), new MRRequestAndCallback(mrRequestPacket, callback));
@@ -203,7 +227,6 @@ public class MRManager<NodeIDType> {
                     }
                 }
             }
-//            System.out.println(this.requestsReceived.get(mrRequestPacket.getRequestID()).getRequestSentLength());
         }
         if(mrRequestPacket.getRequestVectorClock().isEmpty() || this.requestsReceived.get(mrRequestPacket.getRequestID()).getRequestSentLength() == 0) {
             System.out.println("Request vector clock is empty");
@@ -214,6 +237,13 @@ public class MRManager<NodeIDType> {
             handlePacket(mrRequestPacket, mrsm, callback);
         }
     }
+
+    /**
+     * If the vector clock of the request is greater gets all the writes after it, else handles the request as an ack
+     * @param mrRequestPacket
+     * @param mrsm
+     * @param callback
+     */
     private void handleWriteRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm, ExecutedCallback callback){
         System.out.println("Write received:---"+mrRequestPacket);
         this.requestsReceived.putIfAbsent(mrRequestPacket.getRequestID(), new MRRequestAndCallback(mrRequestPacket, callback));
@@ -243,6 +273,12 @@ public class MRManager<NodeIDType> {
         }
 
     }
+
+    /**
+     * Adds writes from own write set to the response
+     * @param mrRequestPacket
+     * @param mrsm
+     */
     private void handleFwdRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
         this.heardFrom(mrRequestPacket.getSource());
         mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
@@ -262,6 +298,12 @@ public class MRManager<NodeIDType> {
         mrRequestPacket.setSource(dest);
         this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
     }
+
+    /**
+     * If writes from all nodes are received, executes the writes in the priority queue. Updates vector clock and write set if needed
+     * @param mrRequestPacket
+     * @param mrsm
+     */
     private void handleFwdAck(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
         this.heardFrom(mrRequestPacket.getSource());
         System.out.println("handle forward ack received:--"+mrRequestPacket);

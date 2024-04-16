@@ -9,6 +9,8 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.net.InetSocketAddress;
+import java.sql.Time;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -27,6 +29,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
     private InetSocketAddress clientSocketAddress = null;
     private DynamoPacketType packetType;
     private String quorumID = null;
+    private Timestamp timestamp = null;
     static class DynamoPacket{
         HashMap<Integer, Integer> vectorClock = new HashMap<>();
         int value;
@@ -179,6 +182,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         for (int i = 0; i < jarray.length() ;i++){
             this.response.add(this.strToDynamoPck(jarray.get(i).toString()));
         }
+        this.timestamp = Timestamp.valueOf(json.getString("ts"));
     }
 
     public DynamoRequestPacket(long reqID, String value,
@@ -215,6 +219,14 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
     }
     public void setRequestValue(String requestValue) {
         this.requestValue = requestValue;
+    }
+
+    public Timestamp getTimestamp() {
+        return timestamp;
+    }
+
+    public void setTimestamp(Timestamp timestamp) {
+        this.timestamp = timestamp;
     }
 
     public HashMap<Integer, Integer> getRequestVectorClock() {
@@ -281,7 +293,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         json.put("destination", this.destination);
         json.put("source", this.source);
         json.put("response", this.responseToString());
-
+        json.put("ts", this.timestamp);
         return json;
     }
 
