@@ -1,5 +1,6 @@
 package edu.umass.cs.consistency.Quorum;
 
+import edu.umass.cs.consistency.EventualConsistency.DynamoRequestPacket;
 import edu.umass.cs.gigapaxos.examples.adder.StatefulAdderApp;
 import edu.umass.cs.gigapaxos.interfaces.Request;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
@@ -9,13 +10,13 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 
 public class QuorumApp extends StatefulAdderApp {
     public String name = "QuorumReplicationApp";
-    protected int total = 20;
-    protected int version = 0;
+    protected HashMap<String, Integer> cart = new HashMap<String, Integer>();
     @Override
     public Request getRequest(String stringified) throws RequestParseException {
         System.out.println("In get request of app");
@@ -37,24 +38,33 @@ public class QuorumApp extends StatefulAdderApp {
 
     @Override
     public boolean execute(Request request) {
-        System.out.println("In execute request of Quorum Replication");
+        System.out.println("In execute request of Dynamo Replication");
         if (request instanceof QuorumRequestPacket) {
-            if (((QuorumRequestPacket) request).getType() != QuorumRequestPacket.QuorumPacketType.WRITE ||
-                    ((QuorumRequestPacket) request).getType() != QuorumRequestPacket.QuorumPacketType.WRITEFORWARD) {
-                System.out.println("Returning total as: " + this.total);
-                ((QuorumRequestPacket) request).addResponse("value", String.valueOf(total));
-                ((QuorumRequestPacket) request).addResponse("version", String.valueOf(version));
+            if (((QuorumRequestPacket) request).getType() == QuorumRequestPacket.QuorumPacketType.READ) {
+                System.out.println("GET request for index: "+((QuorumRequestPacket) request).getRequestValue());
+                try {
+                    ((QuorumRequestPacket) request).setResponseValue(this.cart.get(((QuorumRequestPacket) request).getRequestValue()).toString());
+                }
+                catch (Exception e){
+                    ((QuorumRequestPacket) request).setResponseValue("Exception: "+e);
+                }
             }
             else{
-                System.out.println("Packet type received: "+ ((QuorumRequestPacket) request).getType());
-                System.out.println("In Quorum for write request");
-                this.version = Integer.parseInt(((QuorumRequestPacket) request).getRequestValue().get("version"));
-                this.total = Integer.parseInt(((QuorumRequestPacket) request).getRequestValue().get("total"));
+                System.out.println("In Dynamo App for PUT request");
+                try {
+                    this.cart.merge(((QuorumRequestPacket) request).getRequestValue(), 1, Integer::sum);
+                    ((QuorumRequestPacket) request).setResponseValue("Executed: "+this.cart.toString());
+                } catch (Exception e) {
+                    System.out.println("Check the request value");
+                    ((QuorumRequestPacket) request).setResponseValue("Exception: "+e);
+                    throw new RuntimeException(e);
+                }
             }
+
+            System.out.println("After execution: "+this.cart.toString());
             return true;
         }
         else System.err.println("Unknown request type: " + request.getRequestType());
-
         return false;
     }
 

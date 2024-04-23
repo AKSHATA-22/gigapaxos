@@ -20,8 +20,8 @@ import java.util.UUID;
 
 public class QuorumRequestPacket extends JSONPacket implements ReplicableRequest, ClientRequest  {
     public final long requestID;
-    private HashMap<String, String> responseValue = new HashMap<>();
-    private HashMap<String, String> requestValue = new HashMap<>();
+    private String responseValue = null;
+    private String requestValue = null;
     private int destination = -1;
     private int source = -1;
     private InetSocketAddress clientSocketAddress = null;
@@ -106,16 +106,8 @@ public class QuorumRequestPacket extends JSONPacket implements ReplicableRequest
         System.out.println(json);
         this.packetType = QuorumPacketType.getQuorumPacket(json.getInt("type"));
         this.requestID = json.getLong("requestID");
-        JSONObject jsonObjectReq = new JSONObject(json.getString("requestValue"));
-        if (jsonObjectReq.length() != 0){
-            this.requestValue.put("version", jsonObjectReq.getString("version"));
-            this.requestValue.put("value", jsonObjectReq.getString("value"));
-        }
-        JSONObject jsonObject = new JSONObject(json.getString("responseValue"));
-        if (jsonObject.length() != 0){
-            this.responseValue.put("version", jsonObject.getString("version"));
-            this.responseValue.put("value", jsonObject.getString("value"));
-        }
+        this.requestValue = json.getString("requestValue");
+        this.responseValue = json.getString("responseValue");
         this.source = json.getInt("source");
         this.destination = json.getInt("destination");
         this.slot = json.getInt("slot");
@@ -128,10 +120,7 @@ public class QuorumRequestPacket extends JSONPacket implements ReplicableRequest
         super(reqType);
         this.packetType = reqType;
         this.requestID = reqID;
-        if(!value.isEmpty()) {
-            this.addRequestEntry("value", value);
-            this.addRequestEntry("version", "-1");
-        }
+        this.requestValue = value;
         this.quorumID = quorumID;
     }
 
@@ -149,24 +138,24 @@ public class QuorumRequestPacket extends JSONPacket implements ReplicableRequest
         return quorumID;
     }
 
-    public void setResponseValue(HashMap<String, String> responseValue) {
+    public String getResponseValue() {
+        return responseValue;
+    }
+
+    public void setResponseValue(String responseValue) {
         this.responseValue = responseValue;
+    }
+
+    public String getRequestValue() {
+        return requestValue;
+    }
+
+    public void setRequestValue(String requestValue) {
+        this.requestValue = requestValue;
     }
 
     public void setPacketType(QuorumPacketType packetType){
         this.packetType = packetType;
-    }
-    public void addResponse(String key, String value){
-        this.responseValue.put(key, value);
-    }
-    public void addRequestEntry(String key, String value){
-        this.requestValue.put(key, value);
-    }
-    public HashMap<String, String> getRequestValue(){
-        return this.requestValue;
-    }
-    public HashMap<String, String> getResponseValue(){
-        return this.responseValue;
     }
     @Override
     public InetSocketAddress getClientAddress() {

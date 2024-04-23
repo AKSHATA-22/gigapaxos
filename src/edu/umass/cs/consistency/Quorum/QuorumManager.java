@@ -68,7 +68,7 @@ public class QuorumManager<NodeIDType> {
         final ExecutedCallback callback;
         protected Integer numOfAcksReceived = 0;
         protected Integer version = -1;
-        protected Integer value = -1;
+        protected String value = null;
 
         QuorumRequestAndCallback(QuorumRequestPacket quorumRequestPacket, ExecutedCallback callback){
             this.quorumRequestPacket = quorumRequestPacket;
@@ -82,24 +82,43 @@ public class QuorumManager<NodeIDType> {
         public void reset(){
             this.numOfAcksReceived = 0;
             this.version = -1;
-            this.value = -1;
+            this.value = null;
         }
         public Integer incrementAck(QuorumRequestPacket qp){
             this.numOfAcksReceived += 1;
-            if (qp.getType() != QuorumRequestPacket.QuorumPacketType.WRITEACK && Integer.parseInt(qp.getResponseValue().get("version")) >= this.version){
-                this.value = Integer.parseInt(qp.getResponseValue().get("value"));
-                this.version = Integer.parseInt(qp.getResponseValue().get("version"));
+            if (qp.getType() == QuorumRequestPacket.QuorumPacketType.READACK && qp.getVersion() >= this.version){
+                this.value = qp.getResponseValue();
+                this.version = qp.getVersion();
             }
             return this.numOfAcksReceived;
         }
         public Integer getNumOfAcksReceived(){
             return this.numOfAcksReceived;
         }
-        public QuorumRequestPacket getResponsePacket(){
-            this.quorumRequestPacket.addResponse("version",this.version.toString());
-            this.quorumRequestPacket.addResponse("value",this.value.toString());
-            this.quorumRequestPacket.setPacketType(QuorumRequestPacket.QuorumPacketType.RESPONSE);
+        public QuorumRequestPacket getPacket(){
+//            this.quorumRequestPacket.setVersion(this.version);
+//            this.quorumRequestPacket.addResponse("value",this.value.toString());
+//            this.quorumRequestPacket.setPacketType(QuorumRequestPacket.QuorumPacketType.RESPONSE);
             return this.quorumRequestPacket;
+        }
+        public QuorumRequestPacket.QuorumPacketType getPacketType(){
+            return this.quorumRequestPacket.getType();
+        }
+
+        public Integer getVersion() {
+            return version;
+        }
+
+        public void setVersion(Integer version) {
+            this.version = version;
+        }
+
+        public String  getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
         }
     }
     private void handleQuorumPacket(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback){
@@ -154,7 +173,7 @@ public class QuorumManager<NodeIDType> {
     }
     public void handleReadForward(QuorumRequestPacket qp){
 //        return the value from underlying app and the version from version hashmap
-        System.out.println(qp.toString());
+//        System.out.println(qp.toString());
         Request request = getInterfaceRequest(this.myApp, qp.toString());
         this.myApp.execute(request, false);
         qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READACK);
@@ -164,12 +183,12 @@ public class QuorumManager<NodeIDType> {
         qp.setVersion(version.get(qp.getQuorumID()));
         assert request != null;
         qp.setResponseValue(((QuorumRequestPacket)request).getResponseValue());
-        System.out.println(qp.toString());
+//        System.out.println(qp.toString());
         this.sendRequest(qp, qp.getDestination());
     }
     public void handleWriteForward(QuorumRequestPacket qp){
 //        return the value from underlying app and the version from version hashmap
-        System.out.println(qp.toString());
+//        System.out.println(qp.toString());
         if(qp.getVersion() > this.version.get(qp.getQuorumID())){
             Request request = getInterfaceRequest(this.myApp, qp.toString());
             this.myApp.execute(request, false);
@@ -178,36 +197,37 @@ public class QuorumManager<NodeIDType> {
             version.put(qp.getQuorumID(), qp.getVersion());
         }
         else {
-            HashMap<String, String> hashMap = new HashMap<String, String>();
-            hashMap.put("Response", "Already executed");
-            qp.setResponseValue(hashMap);
+            qp.setResponseValue("Already executed");
         }
         qp.setPacketType(QuorumRequestPacket.QuorumPacketType.WRITEACK);
         int dest = qp.getDestination();
         qp.setDestination(qp.getSource());
         qp.setSource(dest);
-        System.out.println(qp.toString());
+//        System.out.println(qp.toString());
         this.sendRequest(qp, qp.getDestination());
     }
     public void handleReadAck(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
 //        append in the hashmap and check the total
         if (this.requestsReceived.get(qp.getRequestID()).incrementAck(qp) >= rqsm.getReadQuorum()){
-            if(qp.getType() == QuorumRequestPacket.QuorumPacketType.READACK)
-                sendResponse(qp.getRequestID());
-            else
-                sendWriteRequests(qp, rqsm);
+            QuorumRequestPacket writePacket = this.requestsReceived.get(qp.getRequestID()).getPacket();
+            if(writePacket.getType() == QuorumRequestPacket.QuorumPacketType.WRITE) {
+                writePacket.setVersion(this.requestsReceived.get(qp.getRequestID()).getVersion()+1);
+            }
+            else if(writePacket.getType() == QuorumRequestPacket.QuorumPacketType.READ) {
+                writePacket.setVersion(this.requestsReceived.get(qp.getRequestID()).getVersion());
+                writePacket.setRequestValue(this.requestsReceived.get(qp.getRequestID()).getValue());
+            }
+            sendWriteRequests(writePacket, rqsm);
         }
     }
     public void handleWriteAck(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
 //        append in the hashmap and check the total
+        //if write request send executed, for read attach the value string to response
         if (this.requestsReceived.get(qp.getRequestID()).incrementAck(qp) >= rqsm.getWriteQuorum()){
             sendResponse(qp.getRequestID());
         }
     }
     public void sendWriteRequests(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
-        qp.setPacketType(QuorumRequestPacket.QuorumPacketType.WRITEFORWARD);
-        qp.addRequestEntry("version", this.requestsReceived.get(qp.getRequestID()).version.toString());
-        qp.setResponseValue(new HashMap<>());
         this.requestsReceived.get(qp.getRequestID()).reset();
         for (int i = 0; i < rqsm.getQuorumMembers().size()-1; i++) {
             qp.setSource(this.myID);
