@@ -141,6 +141,13 @@ public class QuorumRequestPacket extends JSONPacket implements ReplicableRequest
     public void setVersion(Integer version){
         this.version = version;
     }
+    public int getVersion() {
+        return version;
+    }
+
+    public String getQuorumID() {
+        return quorumID;
+    }
 
     public void setResponseValue(HashMap<String, String> responseValue) {
         this.responseValue = responseValue;

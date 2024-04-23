@@ -33,8 +33,8 @@ public class QuorumManager<NodeIDType> {
     private final Replicable myApp;
     private final HashMap<String, ReplicatedQuorumStateMachine> replicatedQuorums;
 
-    //    Maps the write version/state of this node for a quorumID
-    private HashMap<String, HashMap<Integer, Integer>> vectorClock = new HashMap<>();
+    //    Maps the version of this node for a quorumID
+    private HashMap<String, Integer> version = new HashMap<>();
     private final Stringifiable<NodeIDType> unstringer;
     // a map of NodeIDType objects to integers
     private final IntegerMap<NodeIDType> integerMap = new IntegerMap<NodeIDType>();
@@ -102,28 +102,6 @@ public class QuorumManager<NodeIDType> {
             return this.quorumRequestPacket;
         }
     }
-//    public class reconcileThread extends Thread{
-//        HashMap<String, ReplicatedQuorumStateMachine> replicatedQuorums = null;
-//
-//        public reconcileThread(HashMap<String, ReplicatedQuorumStateMachine> replicatedQuorums){
-//            this.replicatedQuorums = replicatedQuorums;
-//        }
-//        @Override
-//        public void run() {
-//            try {
-//                for (int i = 0; i < this.replicatedQuorums.size(); i++) {
-////                send the version vector for each quorum to all the members
-//                    QuorumRequestPacket reconcilePacket = new QuorumRequestPacket((long) (Math.random() * Integer.MAX_VALUE),
-//                            this.quorumManager.getQuorums(), QuorumRequestPacket.QuorumPacketType.QUORUM_PACKET, QuorumManager.getDefaultServiceName());
-//                }
-//                Thread.sleep(5000);
-//            }
-//            catch (Exception e){
-//                System.out.println(e);
-//            }
-//        }
-//
-//    }
     private void handleQuorumPacket(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback){
 
         QuorumRequestPacket.QuorumPacketType packetType = qp.getType();
@@ -135,7 +113,7 @@ public class QuorumManager<NodeIDType> {
                 break;
             case READFORWARD: case READFORWRITEFORWARD:
                 // node -> read_quorum_node
-                handleForward(qp);
+                handleReadForward(qp);
                 break;
             case READACK: case READFORWRITEACK:
                 // read_quorum_node -> node
@@ -143,7 +121,7 @@ public class QuorumManager<NodeIDType> {
                 break;
             case WRITEFORWARD:
                 // node -> write_quorum_node
-                handleForward(qp);
+                handleWriteForward(qp);
                 break;
             case WRITEACK:
                 // write_quorum_node -> node
@@ -162,38 +140,52 @@ public class QuorumManager<NodeIDType> {
         this.requestsReceived.putIfAbsent(qp.getRequestID(), new QuorumRequestAndCallback(qp, callback));
 //        Send request to all the quorum members
         for (int i = 0; i < rqsm.getQuorumMembers().size()-1; i++) {
-            if(qp.getType() == QuorumRequestPacket.QuorumPacketType.READ){
-                qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWARD);
-            }
-            else {
-                qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWRITEFORWARD);
-            }
+            qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWARD);
+//            if(qp.getType() == QuorumRequestPacket.QuorumPacketType.READ){
+//                qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWARD);
+//            }
+//            else {
+//                qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWRITEFORWARD);
+//            }
             qp.setSource(this.myID);
             qp.setDestination(rqsm.getQuorumMembers().get(i));
             this.sendRequest(qp, qp.getDestination());
         }
     }
-    public void handleForward(QuorumRequestPacket qp){
+    public void handleReadForward(QuorumRequestPacket qp){
 //        return the value from underlying app and the version from version hashmap
         System.out.println(qp.toString());
         Request request = getInterfaceRequest(this.myApp, qp.toString());
         this.myApp.execute(request, false);
-
-        if(qp.getType() == QuorumRequestPacket.QuorumPacketType.READFORWARD){
-            qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READACK);
-        }
-        else if (qp.getType() == QuorumRequestPacket.QuorumPacketType.READFORWRITEFORWARD){
-            qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWRITEACK);
-        }
-        else{
-//            this.checkpoint(this.version);
-            qp.setPacketType(QuorumRequestPacket.QuorumPacketType.WRITEACK);
-        }
+        qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READACK);
         int dest = qp.getDestination();
         qp.setDestination(qp.getSource());
         qp.setSource(dest);
+        qp.setVersion(version.get(qp.getQuorumID()));
         assert request != null;
         qp.setResponseValue(((QuorumRequestPacket)request).getResponseValue());
+        System.out.println(qp.toString());
+        this.sendRequest(qp, qp.getDestination());
+    }
+    public void handleWriteForward(QuorumRequestPacket qp){
+//        return the value from underlying app and the version from version hashmap
+        System.out.println(qp.toString());
+        if(qp.getVersion() > this.version.get(qp.getQuorumID())){
+            Request request = getInterfaceRequest(this.myApp, qp.toString());
+            this.myApp.execute(request, false);
+            assert request != null;
+            qp.setResponseValue(((QuorumRequestPacket)request).getResponseValue());
+            version.put(qp.getQuorumID(), qp.getVersion());
+        }
+        else {
+            HashMap<String, String> hashMap = new HashMap<String, String>();
+            hashMap.put("Response", "Already executed");
+            qp.setResponseValue(hashMap);
+        }
+        qp.setPacketType(QuorumRequestPacket.QuorumPacketType.WRITEACK);
+        int dest = qp.getDestination();
+        qp.setDestination(qp.getSource());
+        qp.setSource(dest);
         System.out.println(qp.toString());
         this.sendRequest(qp, qp.getDestination());
     }
@@ -274,7 +266,6 @@ public class QuorumManager<NodeIDType> {
             matched = true;
             assert quorumRequestPacket != null;
             quorumRequestPacket.setQuorumID(quorumID);
-            quorumRequestPacket.setVersion(rqsm.getVersion());
             this.handleQuorumPacket(quorumRequestPacket, rqsm, callback);
         } else {
             System.out.println("The given quorumID has no state machine associated");
@@ -316,7 +307,7 @@ public class QuorumManager<NodeIDType> {
 
         this.putInstance(quorumID, rqsm);
         this.integerMap.put(nodes);
-
+        this.version.put(quorumID, 0);
         return rqsm;
     }
     public Set<NodeIDType> getReplicaGroup(String quorumID) {

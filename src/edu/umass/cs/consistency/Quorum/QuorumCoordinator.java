@@ -50,8 +50,8 @@ public class QuorumCoordinator<NodeIDType>
     @Override
     public boolean coordinateRequest(Request request, ExecutedCallback callback) throws IOException, RequestParseException {
         // coordinate the request by sending in the respective quorum
-        System.out.println("In coordinate request");
-        System.out.println(request.toString());
+//        System.out.println("In coordinate request");
+//        System.out.println(request.toString());
         return this.quorumManager.propose(request.getServiceName(), request, callback)!= null;
     }
 
