@@ -24,8 +24,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class QuorumClient extends ReconfigurableAppClientAsync<QuorumRequestPacket> {
-
-
+    private final String[] items = new String[]{"table", "chair", "pen"};
+    private final int[] ports = new int[]{2000,2001,2002};
     public QuorumClient() throws IOException {
         super();
     }

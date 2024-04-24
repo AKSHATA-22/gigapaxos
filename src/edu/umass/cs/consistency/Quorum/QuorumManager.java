@@ -130,11 +130,11 @@ public class QuorumManager<NodeIDType> {
                 // client -> node
                 handleRequest(qp, rqsm, callback);
                 break;
-            case READFORWARD: case READFORWRITEFORWARD:
+            case READFORWARD:
                 // node -> read_quorum_node
                 handleReadForward(qp);
                 break;
-            case READACK: case READFORWRITEACK:
+            case READACK:
                 // read_quorum_node -> node
                 handleReadAck(qp, rqsm);
                 break;
@@ -222,9 +222,9 @@ public class QuorumManager<NodeIDType> {
     }
     public void handleWriteAck(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
 //        append in the hashmap and check the total
-        //if write request send executed, for read attach the value string to response
+//        if write request send executed, for read attach the value string to response
         if (this.requestsReceived.get(qp.getRequestID()).incrementAck(qp) >= rqsm.getWriteQuorum()){
-            sendResponse(qp.getRequestID());
+            sendResponse(qp);
         }
     }
     public void sendWriteRequests(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
@@ -235,19 +235,19 @@ public class QuorumManager<NodeIDType> {
             this.sendRequest(qp, qp.getDestination());
         }
     }
-    public void sendResponse(Long requestID){
-        QuorumRequestAndCallback requestAndCallback = this.requestsReceived.get(requestID);
+    public void sendResponse(QuorumRequestPacket qp){
+        QuorumRequestAndCallback requestAndCallback = this.requestsReceived.get(qp.getRequestID());
         if (requestAndCallback != null && requestAndCallback.callback != null) {
 
-            requestAndCallback.callback.executed(requestAndCallback.getResponsePacket()
+            requestAndCallback.callback.executed(qp
                     , true);
-            this.requestsReceived.remove(requestID);
+            this.requestsReceived.remove(qp.getRequestID());
 
         } else {
             // can't find the request being queued in outstanding
             log.log(Level.WARNING, "QuorumManager.handleResponse received " +
                             "an ACK request {0} that does not match any enqueued request.",
-                    new Object[]{requestID});
+                    new Object[]{qp.getRequestID()});
         }
     }
     private static Request getInterfaceRequest(Replicable app, String value) {
