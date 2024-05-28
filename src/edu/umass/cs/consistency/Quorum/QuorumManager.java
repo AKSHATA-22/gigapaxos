@@ -79,10 +79,10 @@ public class QuorumManager<NodeIDType> {
         public String toString(){
             return this.quorumRequestPacket +" ["+ callback+"]";
         }
-        public void reset(){
+        public void reset(int version, String value){
             this.numOfAcksReceived = 0;
-            this.version = -1;
-            this.value = null;
+            this.quorumRequestPacket.setVersion(version);
+            this.quorumRequestPacket.setResponseValue(value);
         }
         public Integer incrementAck(QuorumRequestPacket qp){
             this.numOfAcksReceived += 1;
@@ -160,12 +160,6 @@ public class QuorumManager<NodeIDType> {
 //        Send request to all the quorum members
         for (int i = 0; i < rqsm.getQuorumMembers().size()-1; i++) {
             qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWARD);
-//            if(qp.getType() == QuorumRequestPacket.QuorumPacketType.READ){
-//                qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWARD);
-//            }
-//            else {
-//                qp.setPacketType(QuorumRequestPacket.QuorumPacketType.READFORWRITEFORWARD);
-//            }
             qp.setSource(this.myID);
             qp.setDestination(rqsm.getQuorumMembers().get(i));
             this.sendRequest(qp, qp.getDestination());
@@ -188,13 +182,17 @@ public class QuorumManager<NodeIDType> {
     }
     public void handleWriteForward(QuorumRequestPacket qp){
 //        return the value from underlying app and the version from version hashmap
-//        System.out.println(qp.toString());
         if(qp.getVersion() > this.version.get(qp.getQuorumID())){
-            Request request = getInterfaceRequest(this.myApp, qp.toString());
-            this.myApp.execute(request, false);
-            assert request != null;
-            qp.setResponseValue(((QuorumRequestPacket)request).getResponseValue());
-            version.put(qp.getQuorumID(), qp.getVersion());
+            try{
+                Request request = getInterfaceRequest(this.myApp, qp.toString());
+                this.myApp.execute(request, false);
+                assert request != null;
+                qp.setResponseValue(((QuorumRequestPacket) request).getResponseValue());
+                version.put(qp.getQuorumID(), qp.getVersion());
+            }
+            catch (Exception e){
+                qp.setResponseValue(e.toString());
+            }
         }
         else {
             qp.setResponseValue("Already executed");
@@ -203,7 +201,6 @@ public class QuorumManager<NodeIDType> {
         int dest = qp.getDestination();
         qp.setDestination(qp.getSource());
         qp.setSource(dest);
-//        System.out.println(qp.toString());
         this.sendRequest(qp, qp.getDestination());
     }
     public void handleReadAck(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
@@ -228,10 +225,11 @@ public class QuorumManager<NodeIDType> {
         }
     }
     public void sendWriteRequests(QuorumRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
-        this.requestsReceived.get(qp.getRequestID()).reset();
+        this.requestsReceived.get(qp.getRequestID()).reset(qp.getVersion(), qp.getRequestValue());
         for (int i = 0; i < rqsm.getQuorumMembers().size()-1; i++) {
             qp.setSource(this.myID);
             qp.setDestination(rqsm.getQuorumMembers().get(i));
+            qp.setPacketType(QuorumRequestPacket.QuorumPacketType.WRITEFORWARD);
             this.sendRequest(qp, qp.getDestination());
         }
     }
