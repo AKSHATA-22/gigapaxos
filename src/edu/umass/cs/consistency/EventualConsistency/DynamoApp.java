@@ -1,5 +1,6 @@
 package edu.umass.cs.consistency.EventualConsistency;
 
+import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
@@ -13,7 +14,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 
-public class DynamoApp implements Replicable {
+public class DynamoApp implements Reconcilable {
     public String name = "DynamoReplicationApp";
     private HashMap<String, Integer> cart = new HashMap<>();
     @Override
@@ -101,5 +102,12 @@ public class DynamoApp implements Replicable {
             }
         }
         return true;
+    }
+    @Override
+    public Request reconcile(Request[] requests) {
+        for (Request request: requests){
+
+        }
+        return null;
     }
 }

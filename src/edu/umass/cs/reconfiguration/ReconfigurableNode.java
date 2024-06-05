@@ -18,6 +18,7 @@ package edu.umass.cs.reconfiguration;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -134,8 +135,8 @@ public abstract class ReconfigurableNode<NodeIDType> {
 		// else
 		{
 			Replicable app = ReconfigurationConfig.createApp(args);
-			System.out.println(args);
-			System.out.println(app.getClass());
+//			System.out.println("Args Received by createApp in ReconfigurableNode: "+ Arrays.toString(args));
+//			System.out.println(app.getClass());
 			if (app instanceof ClientMessenger)
 				((ClientMessenger) app).setClientMessenger(messenger);
 			else

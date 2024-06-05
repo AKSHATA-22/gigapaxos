@@ -291,9 +291,6 @@ public abstract class AbstractReplicaCoordinator<NodeIDType> implements
 		if (this.callback != null && this.callback.preExecuted(request))
 			// no further execution
 			return true;
-//		System.out.println("Is application instance of NoOpApp:");
-//		System.out.println(this.app instanceof NoopApp);
-		System.out.println("Class: "+this.app.getClass());
 		boolean handled = request.getRequestType()==ReconfigurationPacket.PacketType.NO_TYPE ||
 				(((this.app instanceof Replicable) ? ((Replicable) (this.app))
 				.execute(request, noReplyToClient) : this.app.execute(request)));
