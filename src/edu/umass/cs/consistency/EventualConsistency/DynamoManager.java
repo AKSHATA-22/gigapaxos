@@ -3,6 +3,7 @@ package edu.umass.cs.consistency.EventualConsistency;
 import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
 import edu.umass.cs.consistency.Quorum.ReplicatedQuorumStateMachine;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
+import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
 import edu.umass.cs.gigapaxos.paxosutil.IntegerMap;
@@ -26,7 +27,7 @@ import java.util.logging.Logger;
 public class DynamoManager<NodeIDType> {
     private final PaxosMessenger<NodeIDType> messenger; // messaging
     private final int myID;
-    private final Replicable myApp;
+    private final Reconcilable myApp;
     private final HashMap<String, ReplicatedQuorumStateMachine> replicatedQuorums;
 
     //    Maps the quorumID to the vectorClock hashmap
@@ -54,7 +55,7 @@ public class DynamoManager<NodeIDType> {
 
         this.largeCheckpointer = new LargeCheckpointer(logFolder,
                 id.toString());
-        this.myApp = LargeCheckpointer.wrap(instance, largeCheckpointer);
+        this.myApp = (Reconcilable) LargeCheckpointer.wrap(instance, largeCheckpointer);
 
         this.replicatedQuorums = new HashMap<>();
 
@@ -64,6 +65,7 @@ public class DynamoManager<NodeIDType> {
         protected DynamoRequestPacket dynamoRequestPacket;
         final ExecutedCallback callback;
         protected Integer numOfAcksReceived = 0;
+        private ArrayList<DynamoRequestPacket> responsesReceived;
 
         DynamoRequestAndCallback(DynamoRequestPacket dynamoRequestPacket, ExecutedCallback callback){
             this.dynamoRequestPacket = dynamoRequestPacket;
@@ -77,48 +79,20 @@ public class DynamoManager<NodeIDType> {
         public void reset(){
             this.numOfAcksReceived = 0;
         }
+        public void setResponse(HashMap<Integer, Integer> vectorClock, int value,Timestamp ts){
+            dynamoRequestPacket.setTimestamp(ts);
+            dynamoRequestPacket.setResponsePacket(new DynamoRequestPacket.DynamoPacket(vectorClock, value));
+        }
         public Integer incrementAck(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
             this.numOfAcksReceived += 1;
             if (qp.getType() == DynamoRequestPacket.DynamoPacketType.GET_ACK){
                 System.out.println("GET ACK received----------");
-                this.reconcile(qp.getResponsePacket().getVectorClock(), qp.getResponsePacket().getValue(), rqsm, qp.getTimestamp());
+                this.addToArrayListForReconcile(qp);
             }
             return this.numOfAcksReceived;
         }
-        public void reconcile(HashMap<Integer, Integer> vectorClock, int value, ReplicatedQuorumStateMachine rqsm, Timestamp ts){
-            System.out.println("========================================================"+this.dynamoRequestPacket.getResponsePacket());
-            if (!this.dynamoRequestPacket.getResponsePacket().getVectorClock().isEmpty()){
-                boolean greater = true;
-                boolean smaller = true;
-                for (int i = 0; i < vectorClock.size(); i++) {
-                    if(this.dynamoRequestPacket.getResponsePacket().getVectorClock().get(rqsm.getQuorumMembers().get(i)) > vectorClock.get(rqsm.getQuorumMembers().get(i))){
-                        greater &= true;
-                        smaller &= false;
-                    }
-                    else if(this.dynamoRequestPacket.getResponsePacket().getVectorClock().get(rqsm.getQuorumMembers().get(i)) < vectorClock.get(rqsm.getQuorumMembers().get(i))){
-                        greater &= false;
-                        smaller &= true;
-                    }
-                }
-                if (smaller || greater){
-                    if (smaller) {
-                        this.dynamoRequestPacket.getResponsePacket().setVectorClock(vectorClock);
-                        this.dynamoRequestPacket.getResponsePacket().setValue(value);
-                        this.dynamoRequestPacket.setTimestamp(ts);
-                    }
-                }
-                else {
-                    if(this.dynamoRequestPacket.getTimestamp().compareTo(ts) < 0){
-                        this.dynamoRequestPacket.getResponsePacket().setVectorClock(vectorClock);
-                        this.dynamoRequestPacket.getResponsePacket().setValue(value);
-                        this.dynamoRequestPacket.setTimestamp(ts);
-                    }
-                }
-            }
-            else {
-                this.dynamoRequestPacket.setResponsePacket(new DynamoRequestPacket.DynamoPacket(vectorClock, value));
-                this.dynamoRequestPacket.setTimestamp(ts);
-            }
+        public void addToArrayListForReconcile(DynamoRequestPacket responsePacket){
+            this.responsesReceived.add(responsePacket);
         }
         public Integer getNumOfAcksReceived(){
             return this.numOfAcksReceived;
@@ -233,6 +207,9 @@ public class DynamoManager<NodeIDType> {
             try {
                 if (this.requestsReceived.get(qp.getRequestID()).incrementAck(qp, rqsm) >= rqsm.getReadQuorum()){
                     System.out.println("sending response for get--------");
+                    ArrayList<Request> arrayList = new ArrayList<>(this.requestsReceived.get(qp.getRequestID()).responsesReceived);
+                    DynamoRequestPacket reconciledResponse = (DynamoRequestPacket) this.myApp.reconcile(arrayList);
+                    this.requestsReceived.get(qp.getRequestID()).setResponse(reconciledResponse.getResponsePacket().getVectorClock(), reconciledResponse.getResponsePacket().getValue(), reconciledResponse.getTimestamp());
                     sendResponse(qp.getRequestID());
                 }
             }

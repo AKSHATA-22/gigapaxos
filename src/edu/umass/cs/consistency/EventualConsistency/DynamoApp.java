@@ -9,14 +9,15 @@ import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Set;
+import java.sql.Timestamp;
+import java.util.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class DynamoApp implements Reconcilable {
     public String name = "DynamoReplicationApp";
     private HashMap<String, Integer> cart = new HashMap<>();
+    private Logger log = Logger.getLogger(DynamoApp.class.getName());
     @Override
     public Request getRequest(String stringified) throws RequestParseException {
         System.out.println("In get request of app");
@@ -24,12 +25,12 @@ public class DynamoApp implements Reconcilable {
         try {
             dynamoRequestPacket = new DynamoRequestPacket(new JSONObject(stringified));
         } catch (JSONException je) {
-            ReconfigurationConfig.getLogger().info(
-                    "Unable to parse request " + stringified);
+            log.log(Level.WARNING, "Unable to parse request " + stringified);
             throw new RequestParseException(je);
         }
         return dynamoRequestPacket;
     }
+
 
     @Override
     public Set<IntegerPacketType> getRequestTypes() {
@@ -41,7 +42,7 @@ public class DynamoApp implements Reconcilable {
         System.out.println("In execute request of Dynamo Replication");
         if (request instanceof DynamoRequestPacket) {
             if (((DynamoRequestPacket) request).getType() == DynamoRequestPacket.DynamoPacketType.GET_FWD) {
-                System.out.println("GET request for index: "+((DynamoRequestPacket) request).getRequestValue());
+                log.log(Level.INFO, "GET request for index: "+((DynamoRequestPacket) request).getRequestValue());
                 try {
                     ((DynamoRequestPacket) request).getResponsePacket().setValue(this.cart.get(((DynamoRequestPacket) request).getRequestValue()));
                 }
@@ -51,7 +52,7 @@ public class DynamoApp implements Reconcilable {
                 }
             }
             else{
-                System.out.println("In Dynamo App for PUT request");
+                log.log(Level.INFO, "In Dynamo App for PUT request");
                 try {
                     JSONObject jsonObject = new JSONObject(((DynamoRequestPacket) request).getRequestValue());
                     if (this.cart.get(jsonObject.getString("key")) != null){
@@ -61,15 +62,14 @@ public class DynamoApp implements Reconcilable {
                         this.cart.put(jsonObject.getString("key"), 1);
                     }
                 } catch (JSONException e) {
-                    System.out.println("Check the request value");
+                    log.log(Level.WARNING, "Check the request value");
                     throw new RuntimeException(e);
                 }
             }
-
-            System.out.println("After execution: "+this.cart.toString());
+            log.log(Level.INFO, "After execution: "+this.cart.toString());
             return true;
         }
-        else System.err.println("Unknown request type: " + request.getRequestType());
+        log.log(Level.WARNING, "Unknown request type: " + request.getRequestType());
         return false;
     }
 
@@ -104,9 +104,55 @@ public class DynamoApp implements Reconcilable {
         return true;
     }
     @Override
-    public Request reconcile(Request[] requests) {
-        for (Request request: requests){
-
+    public Request reconcile(ArrayList<Request> requests) {
+        if (requests.size() == 0){
+            log.log(Level.WARNING, "Reconcile method called on an empty array of requests.");
+            return null;
+        }
+        try {
+            DynamoRequestPacket dynamoRequestPacket = (DynamoRequestPacket) requests.get(0);
+            for (int j = 1; j < requests.size(); j++) {
+                DynamoRequestPacket currectPacket = (DynamoRequestPacket) requests.get(j);
+                HashMap<Integer, Integer> vectorClock = currectPacket.getResponsePacket().getVectorClock();
+                int value = currectPacket.getResponsePacket().getValue();
+                Timestamp ts = currectPacket.getTimestamp();
+                if (!dynamoRequestPacket.getResponsePacket().getVectorClock().isEmpty()){
+                    boolean greater = true;
+                    boolean smaller = true;
+                    for (int key: vectorClock.keySet()) {
+                        if(dynamoRequestPacket.getResponsePacket().getVectorClock().get(key) > vectorClock.get(key)){
+                            greater &= true;
+                            smaller &= false;
+                        }
+                        else if(dynamoRequestPacket.getResponsePacket().getVectorClock().get(key) < vectorClock.get(key)){
+                            greater &= false;
+                            smaller &= true;
+                        }
+                    }
+                    if (smaller || greater){
+                        if (smaller) {
+                            dynamoRequestPacket.getResponsePacket().setVectorClock(vectorClock);
+                            dynamoRequestPacket.getResponsePacket().setValue(value);
+                            dynamoRequestPacket.setTimestamp(ts);
+                        }
+                    }
+                    else {
+                        if(dynamoRequestPacket.getTimestamp().compareTo(ts) < 0){
+                            dynamoRequestPacket.getResponsePacket().setVectorClock(vectorClock);
+                            dynamoRequestPacket.getResponsePacket().setValue(value);
+                            dynamoRequestPacket.setTimestamp(ts);
+                        }
+                    }
+                }
+                else {
+                    dynamoRequestPacket.setResponsePacket(new DynamoRequestPacket.DynamoPacket(vectorClock, value));
+                    dynamoRequestPacket.setTimestamp(ts);
+                }
+            }
+            return dynamoRequestPacket;
+        }
+        catch (Exception e){
+            log.log(Level.WARNING, "Error in roconciling the requests: "+e.toString());
         }
         return null;
     }
