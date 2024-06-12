@@ -91,15 +91,6 @@ public class FailureDetection<NodeIDType> {
     }
 
 
-
-    protected synchronized static void setPessimistic() {
-        pessimism_offset = inter_ping_period_millis;
-    }
-
-    protected synchronized static void setParanoid() {
-        pessimism_offset = node_detection_timeout_millis;
-    }
-
     protected synchronized static long getPessimismOffset() {
         return pessimism_offset;
     }

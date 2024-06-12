@@ -17,12 +17,13 @@
  */
 package edu.umass.cs.reconfiguration.interfaces;
 
+import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 
 
 /**
 @author V. Arun
  */
-public interface Repliconfigurable extends Replicable, Reconfigurable {
+public interface Repliconfigurable extends Replicable, Reconfigurable, Reconcilable {
 	// just a combined interface for convenience
 }

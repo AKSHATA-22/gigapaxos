@@ -14,6 +14,7 @@ import edu.umass.cs.reconfiguration.reconfigurationpackets.ReconfigurationPacket
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -50,7 +51,6 @@ public class DynamoCoordinator<NodeIDType>
     public boolean coordinateRequest(Request request, ExecutedCallback callback) throws IOException, RequestParseException {
         // coordinate the request by sending in the respective quorum
 //        System.out.println("In coordinate request");
-        System.out.println(request.toString());
         return this.dynamoManager.propose(request.getServiceName(), request, callback)!= null;
     }
 
@@ -75,4 +75,6 @@ public class DynamoCoordinator<NodeIDType>
     public Integer getEpoch(String name) {
         return this.dynamoManager.getVersion(name);
     }
+
+
 }

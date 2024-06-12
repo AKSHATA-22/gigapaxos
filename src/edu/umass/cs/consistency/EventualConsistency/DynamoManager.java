@@ -14,12 +14,14 @@ import edu.umass.cs.nio.interfaces.InterfaceNIOTransport;
 import edu.umass.cs.nio.interfaces.Stringifiable;
 import edu.umass.cs.reconfiguration.ReconfigurationConfig;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Set;
+import java.util.concurrent.*;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -43,6 +45,9 @@ public class DynamoManager<NodeIDType> {
     private static final Logger log = Logger.getLogger(ReconfigurationConfig.class.getName());
 
     public static final Class<?> application = DynamoApp.class;
+    private final ScheduledExecutorService execpool;
+    private HashMap<Integer, ScheduledFuture<ReconcileTask>> futures;
+    private ArrayList<StatusReportPacket> receivedStatusReports;
     public static final String getDefaultServiceName() {
         return application.getSimpleName() + "0";
     }
@@ -55,12 +60,25 @@ public class DynamoManager<NodeIDType> {
 
         this.largeCheckpointer = new LargeCheckpointer(logFolder,
                 id.toString());
-        this.myApp = (Reconcilable) LargeCheckpointer.wrap(instance, largeCheckpointer);
+        this.myApp = (Reconcilable) LargeCheckpointer.wrap((Reconcilable)instance, largeCheckpointer);
 
         this.replicatedQuorums = new HashMap<>();
 
         this.messenger = (new PaxosMessenger<NodeIDType>(niot, this.integerMap));
+
+        this.execpool = Executors.newScheduledThreadPool(1,
+                new ThreadFactory() {
+                    @Override
+                    public Thread newThread(Runnable r) {
+                        Thread thread = Executors.defaultThreadFactory()
+                                .newThread(r);
+                        thread.setName(edu.umass.cs.consistency.EventualConsistency.StatusReport.class.getSimpleName()
+                                + myID);
+                        return thread;
+                    }
+                });
     }
+
     public static class DynamoRequestAndCallback {
         protected DynamoRequestPacket dynamoRequestPacket;
         final ExecutedCallback callback;
@@ -79,7 +97,7 @@ public class DynamoManager<NodeIDType> {
         public void reset(){
             this.numOfAcksReceived = 0;
         }
-        public void setResponse(HashMap<Integer, Integer> vectorClock, int value,Timestamp ts){
+        public void setResponse(HashMap<Integer, Integer> vectorClock, String value,Timestamp ts){
             dynamoRequestPacket.setTimestamp(ts);
             dynamoRequestPacket.setResponsePacket(new DynamoRequestPacket.DynamoPacket(vectorClock, value));
         }
@@ -103,6 +121,67 @@ public class DynamoManager<NodeIDType> {
             return this.dynamoRequestPacket;
         }
     }
+    class ReconcileTask implements Runnable{
+//        private StatusReportPacket statusReportPacket;
+        private final Reconcilable myApp;
+        private final int id;
+        private final int source;
+        private final String quorumID;
+        ReconcileTask(int source, int id, Reconcilable myApp, String quorumID){
+            this.source = source;
+            this.id = id;
+            this.myApp = myApp;
+            this.quorumID = quorumID;
+        }
+        public void run(){
+            log.log(Level.INFO, "Sending Status report to: ", this.id);
+            StatusReportPacket statusReportPacket = getStatusReportPacket(source, this.id, this.quorumID);
+            sendStatusReport(statusReportPacket);
+            System.out.println("Sent Status report to: "+ this.id);
+        }
+    }
+    public StatusReportPacket getStatusReportPacket(int source, int destination, String quorumID){
+        StatusReportPacket statusReportPacket = new StatusReportPacket((long) (Math.random() * Integer.MAX_VALUE),
+                new DynamoRequestPacket.DynamoPacket(getVectorClock(quorumID), this.myApp.stateForReconcile()),
+                getLastWriteTS());
+        statusReportPacket.setQuorumID(quorumID);
+        statusReportPacket.setSource(source);
+        statusReportPacket.setDestination(destination);
+        return statusReportPacket;
+    }
+    private void startStatusReport(String quorumID){
+        System.out.println("QuorumID: "+quorumID);
+        System.out.println("Replicated Quorums: "+this.replicatedQuorums);
+        ArrayList<Integer> membersList = this.replicatedQuorums.get(quorumID).getQuorumMembers();
+        System.out.println("Members: "+membersList);
+        for (Integer member: membersList){
+            try {
+                ReconcileTask reconcileTask = new ReconcileTask(this.myID, member, this.myApp, quorumID);
+                System.out.println("Sending status report");
+//                reconcileTask.run(); // run once immediately
+                ScheduledFuture<?> future = execpool
+                        .scheduleAtFixedRate(reconcileTask,
+                                10,
+                                1000,
+                                TimeUnit.MILLISECONDS);
+                futures.put(
+                        member,
+                        (ScheduledFuture<ReconcileTask>) future);
+
+            } catch (Exception e) {
+                log.severe("Can not create ping packet at node " + this.myID
+                        + " for node " + member);
+                e.printStackTrace();
+            }
+        }
+    }
+    public HashMap<Integer, Integer> getVectorClock(String quorumID){
+        return this.vectorClock.get(quorumID);
+    }
+    public Timestamp getLastWriteTS(){
+        return this.lastWriteTS;
+    }
+//    class
     private void handleDynamoPacket(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback){
 
         DynamoRequestPacket.DynamoPacketType packetType = qp.getType();
@@ -151,9 +230,35 @@ public class DynamoManager<NodeIDType> {
             }
         }
     }
+    private void handleStatusReport(StatusReportPacket qp){
+        log.log(Level.INFO, "{0} Received status report packet from {1}", new Object[]{this.myID, qp.getSource()});
+        System.out.println("Received status report packet"+qp.toString());
+        StatusReportPacket statusReportPacket = getStatusReportPacket(this.myID, this.myID, qp.getQuorumID());
+        ArrayList<Request> arrayList = new ArrayList<>();
+        arrayList.add(statusReportPacket);
+        arrayList.add(qp);
+        StatusReportPacket statusReportPacketResponse = (StatusReportPacket) this.myApp.reconcile(arrayList);
+//        System.out.println("---------------------"+statusReportPacketResponse);
+        if(statusReportPacketResponse.getSource() != statusReportPacketResponse.getDestination())
+            this.vectorClock.put(qp.getQuorumID(), statusReportPacketResponse.getRequestPacket().getVectorClock());
+    }
+    private void testCodeToGetState(DynamoRequestPacket qp){
+        System.out.println("=================================here===========================");
+        qp.setPacketType(DynamoRequestPacket.DynamoPacketType.GET_FWD);
+        Request request = getInterfaceRequest(this.myApp, qp.toString());
+        this.myApp.execute(request, false);
+        assert request != null;
+//        System.out.println("value"+((DynamoRequestPacket)request).getResponsePacket().getValue());
+        this.requestsReceived.get(qp.getRequestID()).setResponse(null,((DynamoRequestPacket)request).getResponsePacket().getValue(), null);
+        sendResponse(qp.getRequestID());
+    }
     private void handleGetRequest(DynamoRequestPacket qp,
                                   ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback){
         this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
+        System.out.println("REQUEST VALUE-->"+qp.getRequestValue());
+        if(qp.getRequestValue().isEmpty()){
+            testCodeToGetState(qp);
+        }
         qp.setRequestVectorClock(this.vectorClock.get(rqsm.getQuorumID()));
         qp.setPacketType(DynamoRequestPacket.DynamoPacketType.GET_FWD);
 //        Send request to all the quorum members
@@ -176,7 +281,7 @@ public class DynamoManager<NodeIDType> {
         int dest = qp.getDestination();
         qp.setDestination(qp.getSource());
         qp.setSource(dest);
-        qp.setResponsePacket(new DynamoRequestPacket.DynamoPacket(this.vectorClock.get(rqsm.getQuorumID()), -1));
+        qp.setResponsePacket(new DynamoRequestPacket.DynamoPacket(this.vectorClock.get(rqsm.getQuorumID()), "-1"));
         this.sendRequest(qp, qp.getDestination());
     }
     public void handleGetForward(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm){
@@ -224,6 +329,7 @@ public class DynamoManager<NodeIDType> {
 
             requestAndCallback.callback.executed(requestAndCallback.getResponsePacket()
                     , true);
+            System.out.println("RESPONSE: "+requestAndCallback.getResponsePacket());
             this.requestsReceived.remove(requestID);
 
         } else {
@@ -239,6 +345,17 @@ public class DynamoManager<NodeIDType> {
         try {
             // forward to nodeID
             gTask = new GenericMessagingTask(this.integerMap.get(nodeID),
+                    qp);
+            this.messenger.send(gTask);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+    private void sendStatusReport(StatusReportPacket qp){
+        GenericMessagingTask<NodeIDType,?> gTask = null;
+        try {
+            // forward to nodeID
+            gTask = new GenericMessagingTask(this.integerMap.get(qp.getDestination()),
                     qp);
             this.messenger.send(gTask);
         } catch (Exception e) {
@@ -261,6 +378,10 @@ public class DynamoManager<NodeIDType> {
     public String propose(String quorumID, Request request,
                           ExecutedCallback callback) {
 
+        if(request.getRequestType() == DynamoRequestPacket.DynamoPacketType.STATUS_REPORT){
+            handleStatusReport((StatusReportPacket) request);
+            return null;
+        }
         DynamoRequestPacket dynamoRequestPacket = this.getDynamoRequestPacket(request);
         boolean matched = false;
 
@@ -317,6 +438,7 @@ public class DynamoManager<NodeIDType> {
         this.putInstance(quorumID, rqsm);
         this.integerMap.put(nodes);
         this.putVectorClock(quorumID, rqsm);
+        startStatusReport(quorumID);
         return rqsm;
     }
     public Set<NodeIDType> getReplicaGroup(String quorumID) {

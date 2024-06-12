@@ -18,13 +18,10 @@
 package edu.umass.cs.reconfiguration.reconfigurationutils;
 
 import java.io.UnsupportedEncodingException;
+import java.util.ArrayList;
 import java.util.Set;
 
-import edu.umass.cs.gigapaxos.interfaces.AppRequestParserBytes;
-import edu.umass.cs.gigapaxos.interfaces.Application;
-import edu.umass.cs.gigapaxos.interfaces.GigapaxosShutdownable;
-import edu.umass.cs.gigapaxos.interfaces.Replicable;
-import edu.umass.cs.gigapaxos.interfaces.Request;
+import edu.umass.cs.gigapaxos.interfaces.*;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
 import edu.umass.cs.nio.nioutils.NIOHeader;
 import edu.umass.cs.reconfiguration.interfaces.Reconfigurable;
@@ -80,8 +77,6 @@ public class TrivialRepliconfigurable implements Repliconfigurable, AppRequestPa
 	@Override
 	public boolean execute(Request request,
 			boolean doNotReplyToClient) {
-//		System.out.println("In TrivialRepliConfigurable");
-//		System.out.println(this.app.getClass());
 		return (this.app instanceof Replicable ? 
 				((Replicable)this.app).execute(request, doNotReplyToClient): 
 					this.app.execute(request));
@@ -133,7 +128,21 @@ public class TrivialRepliconfigurable implements Repliconfigurable, AppRequestPa
 				return ((Replicable)this.app).restore(name, state);
 		throw new RuntimeException("Can not get stop request for a non-replicable app");
 	}
-	
+
+	@Override
+	public Request reconcile(ArrayList<Request> requests) {
+		if(this.app instanceof Reconcilable)
+			return ((Reconcilable)this.app).reconcile(requests);
+		throw new RuntimeException("Can not get reconcile request for a non-reconcilable app");
+	}
+
+	@Override
+	public String stateForReconcile() {
+		if(this.app instanceof Reconcilable)
+			return ((Reconcilable)this.app).stateForReconcile();
+		throw new RuntimeException("Can not get reconcile request for a non-reconcilable app");
+	}
+
 	public String toString() {
 		return this.app.toString();
 	}

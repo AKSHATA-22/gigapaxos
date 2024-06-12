@@ -18,6 +18,7 @@ package edu.umass.cs.reconfiguration;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -421,6 +422,15 @@ public abstract class AbstractReplicaCoordinator<NodeIDType> implements
 		: this.preRestore(name, state) ? true
 
 		: app.restore(name, state);
+	}
+	@Override
+	public Request reconcile(ArrayList<Request> requests) {
+		return app.reconcile(requests);
+	}
+
+	@Override
+	public String stateForReconcile() {
+		return app.stateForReconcile();
 	}
 
 	/* Call back active replica for stop requests, else call default callback.

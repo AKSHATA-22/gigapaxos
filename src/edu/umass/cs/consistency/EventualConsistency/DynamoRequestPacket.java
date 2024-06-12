@@ -17,7 +17,7 @@ import java.util.Iterator;
 import java.util.Optional;
 
 public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest, ClientRequest {
-    public final long requestID;
+    private final long requestID;
 //    Maps the versionVector hashmap to the final response string
     private String requestValue = null;
     private HashMap<Integer, Integer> requestVectorClock = new HashMap<Integer, Integer>();
@@ -32,8 +32,8 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
     private Timestamp timestamp = new Timestamp(0);
     static class DynamoPacket{
         HashMap<Integer, Integer> vectorClock = new HashMap<>();
-        int value;
-        DynamoPacket(HashMap<Integer, Integer> vectorClock, Integer value){
+        String value;
+        DynamoPacket(HashMap<Integer, Integer> vectorClock, String value){
             this.vectorClock = vectorClock;
             this.value = value;
         }
@@ -50,10 +50,10 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         public void setVectorClock(HashMap<Integer, Integer> vectorClock) {
             this.vectorClock = vectorClock;
         }
-        public int getValue() {
+        public String getValue() {
             return value;
         }
-        public void setValue(int value) {
+        public void setValue(String value) {
             this.value = value;
         }
         @Override
@@ -87,7 +87,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
                 }
             }
             System.out.println(vectorClock);
-            return new DynamoPacket(vectorClock, json.getInt("value"));
+            return new DynamoPacket(vectorClock, json.getString("value"));
         } catch (JSONException e) {
             throw new RuntimeException(e);
         }
@@ -109,6 +109,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         PUT_ACK("PUT_ACK", 1305),
         GET_ACK("GET_ACK", 1306),
         RESPONSE("RESPONSE", 1307),
+        STATUS_REPORT("STATUS_REPORT", 1308)
         ;
         String label;
         int number;
@@ -160,7 +161,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         this.packetType = DynamoPacketType.getDynamoPacketType(json.getInt("type"));
         this.requestID = json.getLong("requestID");
         this.requestValue = json.getString("requestValue");
-        this.responsePacket = new DynamoPacket(new HashMap<>(), json.getInt("dynamoPacketValue"));
+        this.responsePacket = new DynamoPacket(new HashMap<>(), json.getString("dynamoPacketValue"));
         JSONObject vectorClock = new JSONObject(json.getString("dynamoPacketVectorClock"));
         if (vectorClock.length() != 0) {
             for (Iterator it = vectorClock.keys(); it.hasNext(); ) {
@@ -272,7 +273,6 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
 
     @Override
     protected JSONObject toJSONObjectImpl() throws JSONException {
-//        System.out.println("In json implementation");
         JSONObject json = new JSONObject();
 //        convert this in enums
         json.put("quorumID", this.quorumID);

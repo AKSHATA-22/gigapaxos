@@ -18,17 +18,14 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -789,6 +786,63 @@ public class LargeCheckpointer {
 	 * @return Wrapped {@link Replicable} application that stows away checkpoint
 	 *         created by the application at a system location.
 	 */
+	public static Reconcilable wrap(final Reconcilable pi, LargeCheckpointer lcp) {
+		return new Reconcilable() {
+
+			@Override
+			public boolean execute(Request request) {
+				return pi.execute(request);
+			}
+
+			@Override
+			public Request getRequest(String stringified)
+					throws RequestParseException {
+				return pi.getRequest(stringified);
+			}
+
+			@Override
+			public Set<IntegerPacketType> getRequestTypes() {
+				return pi.getRequestTypes();
+			}
+
+			@Override
+			public boolean execute(Request request, boolean doNotReplyToClient) {
+				return pi.execute(request, doNotReplyToClient);
+			}
+
+			@Override
+			public String checkpoint(String name) {
+				String checkpoint = pi.checkpoint(name);
+				try {
+					if (isCheckpointHandle(checkpoint))
+						checkpoint = lcp.stowAwayCheckpoint(name, checkpoint);
+				} catch (JSONException | IOException e) {
+					e.printStackTrace();
+				}
+				return checkpoint;
+			}
+
+			@Override
+			public boolean restore(String name, String state) {
+				return pi.restore(name, state);
+			}
+
+			@Override
+			public Request reconcile(ArrayList<Request> requests) {
+				return pi.reconcile(requests);
+			}
+
+			@Override
+			public String stateForReconcile() {
+				return pi.stateForReconcile();
+			}
+
+			public String toString() {
+				return pi.toString();
+			}
+
+		};
+	}
 	public static Replicable wrap(final Replicable pi, LargeCheckpointer lcp) {
 		return new Replicable() {
 

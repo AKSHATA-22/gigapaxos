@@ -127,6 +127,7 @@ public class DemandProfile extends AbstractDemandProfile {
 	public boolean shouldReportDemandStats(Request request, InetAddress sender,
 			ReconfigurableAppInfo nodeConfig) {
 		// incorporate request
+//		System.out.println("-------------"+request.getServiceName());
 		if (!request.getServiceName().equals(this.name))
 			return false;
 		this.numRequests++;
