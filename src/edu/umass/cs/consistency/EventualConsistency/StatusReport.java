@@ -1,6 +1,5 @@
 package edu.umass.cs.consistency.EventualConsistency;
 
-import edu.umass.cs.consistency.MonotonicReads.FailureDetection;
 import edu.umass.cs.nio.interfaces.InterfaceNIOTransport;
 import org.json.JSONException;
 import org.json.JSONObject;

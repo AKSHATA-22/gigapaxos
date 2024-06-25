@@ -1,5 +1,7 @@
 package edu.umass.cs.consistency.EventualConsistency;
 
+import edu.umass.cs.consistency.EventualConsistency.Domain.DAG;
+import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
@@ -20,7 +22,7 @@ public class DynamoApp implements Reconcilable {
     private Logger log = Logger.getLogger(DynamoApp.class.getName());
     @Override
     public Request getRequest(String stringified) throws RequestParseException {
-        System.out.println("In get request of app");
+//        System.out.println("In get request of app");
         try {
             return new DynamoRequestPacket(new JSONObject(stringified));
         } catch (JSONException je) {
@@ -36,26 +38,41 @@ public class DynamoApp implements Reconcilable {
     public Set<IntegerPacketType> getRequestTypes() {
         return new HashSet<IntegerPacketType>(Arrays.asList(DynamoRequestPacket.DynamoPacketType.values()));
     }
+    private Set<IntegerPacketType> getGETRequestTypes() {
+        ArrayList<DynamoRequestPacket.DynamoPacketType> GETTypes = new ArrayList<>();
+        GETTypes.add(DynamoRequestPacket.DynamoPacketType.GET);
+        GETTypes.add(DynamoRequestPacket.DynamoPacketType.GET_FWD);
+        GETTypes.add(DynamoRequestPacket.DynamoPacketType.GET_ACK);
+        return new HashSet<IntegerPacketType>(GETTypes);
+    }
+    private Set<IntegerPacketType> getPUTRequestTypes() {
+        ArrayList<DynamoRequestPacket.DynamoPacketType> GETTypes = new ArrayList<>();
+        GETTypes.add(DynamoRequestPacket.DynamoPacketType.PUT);
+        GETTypes.add(DynamoRequestPacket.DynamoPacketType.PUT_FWD);
+        GETTypes.add(DynamoRequestPacket.DynamoPacketType.PUT_ACK);
+        return new HashSet<IntegerPacketType>(GETTypes);
+    }
     @Override
     public boolean execute(Request request) {
-        System.out.println("In execute request of Dynamo Replication");
         if (request instanceof DynamoRequestPacket) {
-            if (((DynamoRequestPacket) request).getType() == DynamoRequestPacket.DynamoPacketType.GET_FWD) {
+            if (getGETRequestTypes().contains(((DynamoRequestPacket) request).getType())) {
                 log.log(Level.INFO, "GET request for index: "+((DynamoRequestPacket) request).getRequestValue());
                 if(!((DynamoRequestPacket) request).getRequestValue().isEmpty()) {
                     try {
-                        ((DynamoRequestPacket) request).getResponsePacket().setValue(String.valueOf(this.cart.get(((DynamoRequestPacket) request).getRequestValue())));
+                        JSONObject jsonObject = new JSONObject(((DynamoRequestPacket) request).getRequestValue());
+                        ((DynamoRequestPacket) request).getResponsePacket().setValue(String.valueOf(this.cart.get(jsonObject.getString("key"))));
                     } catch (Exception e) {
-                        ((DynamoRequestPacket) request).getResponsePacket().setValue("-1");
+                        ((DynamoRequestPacket) request).getResponsePacket().setValue("0");
                     }
                 }
                 else {
                     ((DynamoRequestPacket) request).getResponsePacket().setValue(this.cart.toString());
                 }
             }
-            else{
+            else if(getPUTRequestTypes().contains(((DynamoRequestPacket) request).getType())){
                 log.log(Level.INFO, "In Dynamo App for PUT request");
                 try {
+                    System.out.println("-----------------App PUT"+((DynamoRequestPacket) request).getRequestValue()+"--"+((DynamoRequestPacket) request).getRequestID()+"----------------------------");
                     JSONObject jsonObject = new JSONObject(((DynamoRequestPacket) request).getRequestValue());
                     if (this.cart.get(jsonObject.getString("key")) != null){
                         this.cart.put(jsonObject.getString("key"), this.cart.get(jsonObject.getString("key"))+1);
@@ -77,7 +94,7 @@ public class DynamoApp implements Reconcilable {
 
     @Override
     public boolean execute(Request request, boolean doNotReplyToClient) {
-        System.out.println("In other execute");
+//        System.out.println("In other execute");
         if (request instanceof StatusReportPacket) {
             log.log(Level.INFO, "Status Report received");
             return true;
@@ -122,97 +139,15 @@ public class DynamoApp implements Reconcilable {
         return true;
     }
     @Override
-    public Request reconcile(ArrayList<Request> requests) {
+    public GraphNode reconcile(ArrayList<GraphNode> requests) {
         if (requests.isEmpty()){
             log.log(Level.WARNING, "Reconcile method called on an empty array of requests.");
             return null;
         }
-        if (requests.get(0) instanceof DynamoRequestPacket) {
-            try {
-                DynamoRequestPacket dynamoRequestPacket = (DynamoRequestPacket) requests.get(0);
-                for (int j = 1; j < requests.size(); j++) {
-                    DynamoRequestPacket currentPacket = (DynamoRequestPacket) requests.get(j);
-                    HashMap<Integer, Integer> vectorClock = currentPacket.getResponsePacket().getVectorClock();
-                    String value = currentPacket.getResponsePacket().getValue();
-                    Timestamp ts = currentPacket.getTimestamp();
-                    if (!dynamoRequestPacket.getResponsePacket().getVectorClock().isEmpty()) {
-                        boolean greater = true;
-                        boolean smaller = true;
-                        for (int key : vectorClock.keySet()) {
-                            if (dynamoRequestPacket.getResponsePacket().getVectorClock().get(key) > vectorClock.get(key)) {
-                                greater &= true;
-                                smaller &= false;
-                            } else if (dynamoRequestPacket.getResponsePacket().getVectorClock().get(key) < vectorClock.get(key)) {
-                                greater &= false;
-                                smaller &= true;
-                            }
-                        }
-                        if (smaller || greater) {
-                            if (smaller) {
-                                dynamoRequestPacket.getResponsePacket().setVectorClock(vectorClock);
-                                dynamoRequestPacket.getResponsePacket().setValue(value);
-                                dynamoRequestPacket.setTimestamp(ts);
-                            }
-                        } else {
-                            if (dynamoRequestPacket.getTimestamp().compareTo(ts) < 0) {
-                                dynamoRequestPacket.getResponsePacket().setVectorClock(vectorClock);
-                                dynamoRequestPacket.getResponsePacket().setValue(value);
-                                dynamoRequestPacket.setTimestamp(ts);
-                            }
-                        }
-                    } else {
-                        dynamoRequestPacket.setResponsePacket(new DynamoRequestPacket.DynamoPacket(vectorClock, value));
-                        dynamoRequestPacket.setTimestamp(ts);
-                    }
-                }
-                return dynamoRequestPacket;
-            } catch (Exception e) {
-                log.log(Level.WARNING, "Error in reconciling the requests: " + e.toString());
-            }
-        } else if (requests.get(0) instanceof StatusReportPacket) {
-            try {
-                StatusReportPacket statusReportPacket = (StatusReportPacket) requests.get(0);
-                for (int j = 1; j < requests.size(); j++) {
-                    StatusReportPacket currentPacket = (StatusReportPacket) requests.get(j);
-                    HashMap<Integer, Integer> vectorClock = currentPacket.getRequestPacket().getVectorClock();
-                    String value = currentPacket.getRequestPacket().getValue();
-                    Timestamp ts = currentPacket.getRequestTimestamp();
-                    boolean greater = true;
-                    boolean smaller = true;
-                    System.out.println(vectorClock);
-                    System.out.println(statusReportPacket.getRequestPacket().getVectorClock());
-                    for (int key : vectorClock.keySet()) {
-                        if (statusReportPacket.getRequestPacket().getVectorClock().get(key) > vectorClock.get(key)) {
-                            greater &= true;
-                            smaller &= false;
-                        } else if (statusReportPacket.getRequestPacket().getVectorClock().get(key) < vectorClock.get(key)) {
-                            greater &= false;
-                            smaller &= true;
-                        }
-                    }
-                    if (smaller || greater) {
-                        if (smaller & !greater) {
-                            statusReportPacket.getRequestPacket().setVectorClock(vectorClock);
-                            statusReportPacket.getRequestPacket().setValue(value);
-                            statusReportPacket.setRequestTimestamp(ts);
-                            statusReportPacket.setDestination(currentPacket.getSource());
-                        }
-                    } else {
-                        if (statusReportPacket.getRequestTimestamp().compareTo(ts) < 0) {
-                            statusReportPacket.getRequestPacket().setVectorClock(vectorClock);
-                            statusReportPacket.getRequestPacket().setValue(value);
-                            statusReportPacket.setRequestTimestamp(ts);
-                            statusReportPacket.setDestination(currentPacket.getSource());
-                        }
-                    }
-                }
-                if(statusReportPacket.getSource() != statusReportPacket.getDestination()){
-                    unstringifyState(statusReportPacket.getRequestPacket().getValue());
-                }
-                return statusReportPacket;
-            } catch (Exception e) {
-                log.log(Level.WARNING, "Error in reconciling the requests: " + e.toString());
-            }
+        try {
+            return DAG.createDominantChildGraphNode(requests, null);
+        } catch (Exception e) {
+            log.log(Level.WARNING, "Error in reconciling the requests: " + e.toString());
         }
         return null;
     }

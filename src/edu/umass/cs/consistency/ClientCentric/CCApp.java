@@ -1,4 +1,4 @@
-package edu.umass.cs.consistency.MonotonicReads;
+package edu.umass.cs.consistency.ClientCentric;
 
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
@@ -13,53 +13,53 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
 
-public class MRApp implements Replicable {
-    public String name = "MRReplicationApp";
+public class CCApp implements Replicable {
+    public String name = "CCApp";
     private HashMap<String, String> board = new HashMap<>();
     @Override
     public Request getRequest(String stringified) throws RequestParseException {
         System.out.println("In get request of app");
-        MRRequestPacket mrRequestPacket = null;
+        CCRequestPacket CCRequestPacket = null;
         try {
-            mrRequestPacket = new MRRequestPacket(new JSONObject(stringified));
+            CCRequestPacket = new CCRequestPacket(new JSONObject(stringified));
         } catch (JSONException je) {
             ReconfigurationConfig.getLogger().info(
                     "Unable to parse request " + stringified);
             throw new RequestParseException(je);
         }
-        return mrRequestPacket;
+        return CCRequestPacket;
     }
 
     @Override
     public Set<IntegerPacketType> getRequestTypes() {
-        return new HashSet<IntegerPacketType>(Arrays.asList(MRRequestPacket.MRPacketType.values()));
+        return new HashSet<IntegerPacketType>(Arrays.asList(CCRequestPacket.CCPacketType.values()));
     }
 
     @Override
     public boolean execute(Request request) {
         System.out.println("In execute request of MR Replication");
-        if (request instanceof MRRequestPacket) {
+        if (request instanceof CCRequestPacket) {
 //            Request will be of type(C for create and U for update): C CIRCLE01 1,1; C TRIANGLE02 2,4; U CIRCLE01 1,4
-            if (((MRRequestPacket) request).getType() == MRRequestPacket.MRPacketType.WRITE) {
-                String req = ((MRRequestPacket) request).getRequestValue();
+            if (((CCRequestPacket) request).getType() == CCRequestPacket.CCPacketType.MR_WRITE || ((CCRequestPacket) request).getType() == CCRequestPacket.CCPacketType.MW_WRITE) {
+                String req = ((CCRequestPacket) request).getRequestValue();
                 System.out.println("WRITE request "+req);
                 String[] reqArray = req.split(" ");
                 try {
                     if (reqArray[0].equals("U") & !this.board.containsKey(reqArray[1])) {
-                        ((MRRequestPacket) request).setResponseValue("Update cannot be performed as the element does not exist");
+                        ((CCRequestPacket) request).setResponseValue("Update cannot be performed as the element does not exist");
                     }
                     else {
                         this.board.put(reqArray[1], reqArray[2]);
-                        ((MRRequestPacket) request).setResponseValue("EXECUTED");
+                        ((CCRequestPacket) request).setResponseValue("EXECUTED");
                     }
                 }
                 catch (Exception e){
-                    ((MRRequestPacket) request).setResponseValue(e.toString());
+                    ((CCRequestPacket) request).setResponseValue(e.toString());
                 }
             }
-            else if (((MRRequestPacket) request).getType() == MRRequestPacket.MRPacketType.READ){
+            else if (((CCRequestPacket) request).getType() == CCRequestPacket.CCPacketType.MR_READ || ((CCRequestPacket) request).getType() == CCRequestPacket.CCPacketType.MW_READ){
                 System.out.println("In MR App for READ request");
-                ((MRRequestPacket) request).setResponseValue(this.board+"");
+                ((CCRequestPacket) request).setResponseValue(this.board+"");
             }
 
             System.out.println("After execution: "+this.board.toString());

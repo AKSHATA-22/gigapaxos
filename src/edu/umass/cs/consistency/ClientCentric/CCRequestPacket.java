@@ -1,7 +1,6 @@
-package edu.umass.cs.consistency.MonotonicReads;
+package edu.umass.cs.consistency.ClientCentric;
 
 import edu.umass.cs.gigapaxos.interfaces.ClientRequest;
-import edu.umass.cs.gigapaxos.paxospackets.PaxosPacket;
 import edu.umass.cs.nio.JSONPacket;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
 import edu.umass.cs.reconfiguration.interfaces.ReplicableRequest;
@@ -10,30 +9,29 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.net.InetSocketAddress;
-import java.sql.Time;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 
-public class MRRequestPacket extends JSONPacket implements ReplicableRequest, ClientRequest {
+public class CCRequestPacket extends JSONPacket implements ReplicableRequest, ClientRequest {
     public final long requestID;
     //    Maps the versionVector hashmap to the final response string
     private String requestValue = null;
     private String serviceName = null;
     private HashMap<Integer, Timestamp> requestVectorClock = new HashMap<Integer, Timestamp>();
     private HashMap<Integer, Timestamp> responseVectorClock = new HashMap<Integer, Timestamp>();
-    private HashMap<Integer, ArrayList<MRManager.Write>> requestWrites = new HashMap<>();
-    private HashMap<Integer, ArrayList<MRManager.Write>> responseWrites = new HashMap<>();
+    private HashMap<Integer, ArrayList<CCManager.Write>> requestWrites = new HashMap<>();
+    private HashMap<Integer, ArrayList<CCManager.Write>> responseWrites = new HashMap<>();
     private String responseValue = "";
     private Timestamp writesTo = new Timestamp(0);
     private Timestamp writesFrom = new Timestamp(0);
     private int destination = -1;
     private int source = -1;
     private InetSocketAddress clientSocketAddress = null;
-    private MRPacketType packetType;
+    private CCPacketType packetType;
 
-    public MRRequestPacket(long reqID, MRPacketType reqType, String serviceName, String value, HashMap<Integer, Timestamp> requestVectorClock, HashMap<Integer, ArrayList<MRManager.Write>> requestWrites){
+    public CCRequestPacket(long reqID, CCPacketType reqType, String serviceName, String value, HashMap<Integer, Timestamp> requestVectorClock, HashMap<Integer, ArrayList<CCManager.Write>> requestWrites){
         super(reqType);
         this.packetType = reqType;
         this.requestID = reqID;
@@ -42,8 +40,8 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         this.requestVectorClock = requestVectorClock;
         this.serviceName = serviceName;
     }
-    public MRRequestPacket(long reqID, MRPacketType reqType,
-                               MRRequestPacket req){
+    public CCRequestPacket(long reqID, CCPacketType reqType,
+                           CCRequestPacket req){
         super(reqType);
 
         this.packetType = reqType;
@@ -63,10 +61,10 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         this.destination = req.destination;
         this.source = req.source;
     }
-    public MRRequestPacket(JSONObject jsonObject) throws JSONException{
+    public CCRequestPacket(JSONObject jsonObject) throws JSONException{
         super(jsonObject);
         this.requestID = jsonObject.getLong("requestID");
-        this.setPacketType(MRPacketType.getMRPacketType(jsonObject.getInt("type")));
+        this.setPacketType(CCPacketType.getMRPacketType(jsonObject.getInt("type")));
         this.setServiceName(jsonObject.getString("serviceName"));
         if (jsonObject.has("requestVectorClock")){
             this.setRequestValue(jsonObject.getString("requestValue"));
@@ -93,7 +91,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
                     JSONArray jsonArray = reqW.getJSONArray(i);
                     for (int j = 0; j < jsonArray.length(); j++){
                         JSONObject jsonObject1 = jsonArray.getJSONObject(j);
-                        this.requestWrites.get(Integer.parseInt(i)).add(new MRManager.Write(Timestamp.valueOf(jsonObject1.getString("ts")),
+                        this.requestWrites.get(Integer.parseInt(i)).add(new CCManager.Write(Timestamp.valueOf(jsonObject1.getString("ts")),
                                 jsonObject1.getString("statement"), Integer.parseInt(jsonObject1.getString("node"))));
                     }
                 }
@@ -106,7 +104,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
                     JSONArray jsonArray = resW.getJSONArray(i);
                     for (int j = 0; j < jsonArray.length(); j++){
                         JSONObject jsonObject1 = jsonArray.getJSONObject(j);
-                        this.responseWrites.get(Integer.parseInt(i)).add(new MRManager.Write(Timestamp.valueOf(jsonObject1.getString("ts")),
+                        this.responseWrites.get(Integer.parseInt(i)).add(new CCManager.Write(Timestamp.valueOf(jsonObject1.getString("ts")),
                                 jsonObject1.getString("statement"), Integer.parseInt(jsonObject1.getString("node"))));
                     }
                 }
@@ -117,32 +115,34 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
             this.setSource(jsonObject.getInt("source"));
         }
         else{
-            this.setPacketType(MRPacketType.FAILURE_DETECT);
+            this.setPacketType(CCPacketType.FAILURE_DETECT);
             this.setRequestValue(jsonObject.toString());
         }
     }
-    public enum MRPacketType implements IntegerPacketType {
-        READ("READ", 1401),
-        WRITE("WRITE", 1402),
-        FWD("FWD", 1403),
-        FWD_ACK("FWD_ACK", 1404),
-        FAILURE_DETECT("FAILURE_DETECT", 1405),
-        RESPONSE("RESPONSE", 1406),
+    public enum CCPacketType implements IntegerPacketType {
+        MR_READ("MR_READ", 1401),
+        MR_WRITE("MR_WRITE", 1402),
+        MW_READ("MW_READ", 1403),
+        MW_WRITE("MW_WRITE", 1404),
+        FWD("FWD", 1405),
+        FWD_ACK("FWD_ACK", 1406),
+        FAILURE_DETECT("FAILURE_DETECT", 1407),
+        RESPONSE("RESPONSE", 1408),
         ;
         String label;
         int number;
-        private static HashMap<String, MRPacketType> labels = new HashMap<String, MRPacketType>();
-        private static HashMap<Integer, MRPacketType> numbers = new HashMap<Integer, MRPacketType>();
-        MRPacketType(String s, int t) {
+        private static HashMap<String, CCPacketType> labels = new HashMap<String, CCPacketType>();
+        private static HashMap<Integer, CCPacketType> numbers = new HashMap<Integer, CCPacketType>();
+        CCPacketType(String s, int t) {
             this.label = s;
             this.number = t;
         }
         static {
-            for (MRRequestPacket.MRPacketType type: MRRequestPacket.MRPacketType.values()) {
-                if (!MRRequestPacket.MRPacketType.labels.containsKey(type.label)
-                        && !MRRequestPacket.MRPacketType.numbers.containsKey(type.number)) {
-                    MRRequestPacket.MRPacketType.labels.put(type.label, type);
-                    MRRequestPacket.MRPacketType.numbers.put(type.number, type);
+            for (CCPacketType type: CCPacketType.values()) {
+                if (!CCPacketType.labels.containsKey(type.label)
+                        && !CCPacketType.numbers.containsKey(type.number)) {
+                    CCPacketType.labels.put(type.label, type);
+                    CCPacketType.numbers.put(type.number, type);
                 } else {
                     assert(false): "Duplicate or inconsistent enum type for ChainPacketType";
                 }
@@ -152,8 +152,8 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         public int getInt() {
             return this.number;
         }
-        public static MRRequestPacket.MRPacketType getMRPacketType(int type){
-            return MRRequestPacket.MRPacketType.numbers.get(type);
+        public static CCPacketType getMRPacketType(int type){
+            return CCPacketType.numbers.get(type);
         }
 
     }
@@ -175,7 +175,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
     public void setRequestValue(String requestValue) {
         this.requestValue = requestValue;
     }
-    public MRPacketType getType() {
+    public CCPacketType getType() {
         return this.packetType;
     }
     public void setServiceName(String name){
@@ -186,19 +186,19 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         return requestVectorClock;
     }
 
-    public HashMap<Integer, ArrayList<MRManager.Write>> getRequestWrites() {
+    public HashMap<Integer, ArrayList<CCManager.Write>> getRequestWrites() {
         return requestWrites;
     }
 
-    public void setRequestWrites(HashMap<Integer, ArrayList<MRManager.Write>> requestWrites) {
+    public void setRequestWrites(HashMap<Integer, ArrayList<CCManager.Write>> requestWrites) {
         this.requestWrites = requestWrites;
     }
 
-    public HashMap<Integer, ArrayList<MRManager.Write>> getResponseWrites() {
+    public HashMap<Integer, ArrayList<CCManager.Write>> getResponseWrites() {
         return responseWrites;
     }
 
-    public void setResponseWrites(HashMap<Integer, ArrayList<MRManager.Write>> responseWrites) {
+    public void setResponseWrites(HashMap<Integer, ArrayList<CCManager.Write>> responseWrites) {
         this.responseWrites = responseWrites;
     }
 
@@ -209,7 +209,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         if(!this.responseWrites.containsKey(nodeID)){
             this.responseWrites.put(nodeID, new ArrayList<>());
         }
-        this.responseWrites.get(nodeID).add(new MRManager.Write(ts, statement, nodeID));
+        this.responseWrites.get(nodeID).add(new CCManager.Write(ts, statement, nodeID));
     }
 
     public Timestamp getWritesTo() {
@@ -252,11 +252,11 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         this.clientSocketAddress = clientSocketAddress;
     }
 
-    public MRPacketType getPacketType() {
+    public CCPacketType getPacketType() {
         return packetType;
     }
 
-    public void setPacketType(MRPacketType packetType) {
+    public void setPacketType(CCPacketType packetType) {
         this.packetType = packetType;
     }
 
@@ -264,8 +264,8 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
     public ClientRequest getResponse() {
 //        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! getResponse is called!!!!!!!!!!!!");
 
-        MRRequestPacket reply = new MRRequestPacket(this.requestID,
-                MRRequestPacket.MRPacketType.RESPONSE, this);
+        CCRequestPacket reply = new CCRequestPacket(this.requestID,
+                CCPacketType.RESPONSE, this);
 //        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Response value is "+response+"!!!!!!!!!!!!");
         reply.responseValue = this.responseValue;
         reply.responseVectorClock  = this.responseVectorClock;
@@ -303,7 +303,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         JSONObject reqWrites = new JSONObject();
         for(Integer i: this.requestWrites.keySet()){
             JSONArray jsonArray = new JSONArray();
-            for(MRManager.Write write: this.requestWrites.get(i)){
+            for(CCManager.Write write: this.requestWrites.get(i)){
                 jsonArray.put(write.toJSONObjectImpl());
             }
             reqWrites.put(String.valueOf(i), jsonArray);
@@ -312,7 +312,7 @@ public class MRRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         JSONObject resWrites = new JSONObject();
         for(Integer i: this.responseWrites.keySet()){
             JSONArray jsonArray = new JSONArray();
-            for(MRManager.Write write: this.responseWrites.get(i)){
+            for(CCManager.Write write: this.responseWrites.get(i)){
                 jsonArray.put(write.toJSONObjectImpl());
             }
             resWrites.put(String.valueOf(i), jsonArray);

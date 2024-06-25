@@ -1,23 +1,22 @@
-package edu.umass.cs.consistency.MonotonicReads;
+package edu.umass.cs.consistency.ClientCentric;
 
-import edu.umass.cs.consistency.EventualConsistency.DynamoManager;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 
 import java.util.ArrayList;
 import java.util.Set;
 
-public class MRReplicatedStateMachine {
+public class CCReplicatedStateMachine {
     private ArrayList<Integer> members;
     private final String serviceName;
     private final int version;
-    private MRManager<?> mrManager = null;
-    public MRReplicatedStateMachine(String serviceName, int version, int id,
-                                        Set<Integer> members, Replicable app, String initialState,
-                                    MRManager<?> mrManager){
+    private CCManager<?> CCManager = null;
+    public CCReplicatedStateMachine(String serviceName, int version, int id,
+                                    Set<Integer> members, Replicable app, String initialState,
+                                    CCManager<?> CCManager){
         this.members = new ArrayList<Integer>(members);
         this.serviceName = serviceName;
         this.version = version;
-        this.mrManager = mrManager;
+        this.CCManager = CCManager;
 
 //        restore yet to be implemented
 

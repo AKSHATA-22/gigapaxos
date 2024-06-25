@@ -19,7 +19,7 @@ public class QuorumApp extends StatefulAdderApp {
     protected HashMap<String, Integer> cart = new HashMap<String, Integer>();
     @Override
     public Request getRequest(String stringified) throws RequestParseException {
-        System.out.println("In get request of app");
+//        System.out.println("In get request of app");
         QuorumRequestPacket quorumRequestPacket = null;
         try {
             quorumRequestPacket = new QuorumRequestPacket(new JSONObject(stringified));

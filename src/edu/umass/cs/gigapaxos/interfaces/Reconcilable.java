@@ -1,5 +1,7 @@
 package edu.umass.cs.gigapaxos.interfaces;
 
+import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
+
 import java.util.ArrayList;
 
 public interface Reconcilable extends Replicable {
@@ -13,6 +15,6 @@ public interface Reconcilable extends Replicable {
      * @return
      */
 
-    public Request reconcile(ArrayList<Request> requests);
+    public GraphNode reconcile(ArrayList<GraphNode> requests);
     public String stateForReconcile();
 }

@@ -1,9 +1,6 @@
 package edu.umass.cs.consistency.EventualConsistency;
 
-import edu.umass.cs.consistency.MonotonicReads.MRRequestPacket;
-import edu.umass.cs.consistency.MonotonicReads.TESTMR;
-import edu.umass.cs.consistency.MonotonicReads.TESTMRClient;
-import edu.umass.cs.consistency.Quorum.QuorumRequestPacket;
+import edu.umass.cs.consistency.ClientCentric.TESTMR;
 import edu.umass.cs.gigapaxos.interfaces.Callback;
 import edu.umass.cs.gigapaxos.interfaces.Request;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
@@ -11,31 +8,30 @@ import edu.umass.cs.reconfiguration.ReconfigurableAppClientAsync;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
 import org.json.JSONException;
 import org.json.JSONObject;
-import org.junit.Assert;
-import org.junit.Test;
 import org.junit.runner.JUnitCore;
 import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
-
+import edu.umass.cs.consistency.EventualConsistency.TESTDynamo.*;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import static edu.umass.cs.consistency.EventualConsistency.TESTDynamo.passed;
+
 public class TESTDynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPacket> {
+    public final int[] ports = new int[]{2000, 2001, 2002};
     private final String[] items = new String[]{"table", "chair", "pen"};
-    private final int[] ports = new int[]{2000, 2001, 2002};
     private final AtomicInteger responseCounter = new AtomicInteger(0);
-    private AtomicBoolean passed = new AtomicBoolean(true);
     private String stateReceived = null;
+    private HashMap<String, HashMap<Integer, Integer>> objectToVectorClock = new HashMap<>();
+    private HashMap<String, Integer> objectToNumberOfEntries = new HashMap<>();
     static final Logger log = Logger.getLogger(TESTDynamoClient.class.getName());
     public TESTDynamoClient() throws IOException {
         super();
@@ -56,10 +52,16 @@ public class TESTDynamoClient extends ReconfigurableAppClientAsync<DynamoRequest
         return new HashSet<>(Arrays.asList(DynamoRequestPacket.DynamoPacketType.values()));
     }
 
-    public static DynamoRequestPacket makePutRequest(TESTDynamoClient dc) {
-        int randomNum = (int) (Math.random() * ((dc.items.length - 1) + 1));
+    public static DynamoRequestPacket makePutRequest(TESTDynamoClient dc, int item) {
         JSONObject jsonObject = new JSONObject();
-        String putString = dc.items[randomNum];
+        String putString;
+        if(item == -1) {
+            int randomNum = (int) (Math.random() * ((dc.items.length - 1) + 1));
+            putString = dc.items[randomNum];
+        }
+        else {
+            putString = dc.items[item];
+        }
         try {
             jsonObject.put("key", putString);
         } catch (JSONException e) {
@@ -69,89 +71,78 @@ public class TESTDynamoClient extends ReconfigurableAppClientAsync<DynamoRequest
                 jsonObject.toString(), DynamoRequestPacket.DynamoPacketType.PUT, DynamoManager.getDefaultServiceName());
     }
 
-    private static DynamoRequestPacket makeGetRequest(TESTDynamoClient dc) {
-        int randomNum = (int) (Math.random() * ((dc.items.length - 1) + 1));
-        String getString = dc.items[randomNum];
-        return new DynamoRequestPacket((long) (Math.random() * Integer.MAX_VALUE),
-                getString, DynamoRequestPacket.DynamoPacketType.GET, DynamoManager.getDefaultServiceName());
-    }
-    private static DynamoRequestPacket makeGetStateRequest(TESTDynamoClient dc) {
-        return new DynamoRequestPacket((long) (Math.random() * Integer.MAX_VALUE),
-                "", DynamoRequestPacket.DynamoPacketType.GET, DynamoManager.getDefaultServiceName());
-    }
-    public boolean allStateEqual() throws IOException, InterruptedException {
-        TESTDynamoClient testDynamoClient = new TESTDynamoClient();
-        DynamoRequestPacket request = makeGetStateRequest(testDynamoClient);
-        log.log(Level.INFO, "Sent write request from client 0");
-        for (int port: testDynamoClient.ports) {
-            testDynamoClient.sendRequest(request,
-                    new InetSocketAddress("localhost", port),
-                    new Callback<Request, DynamoRequestPacket>() {
-
-                        long createTime = System.currentTimeMillis();
-
-                        @Override
-                        public DynamoRequestPacket processResponse(Request response) {
-                            assert (response instanceof DynamoRequestPacket) :
-                                    response.getSummary();
-
-                            log.log(Level.INFO, "Response for request ["
-                                    + request.getSummary()
-                                    + " "
-                                    + request.getRequestValue()
-                                    + "] = "
-                                    + ((DynamoRequestPacket) response).getResponsePacket()
-                                    + " received in "
-                                    + (System.currentTimeMillis() - createTime)
-                                    + "ms");
-                            System.out
-                                    .println("Response for request ["
-                                            + request.getSummary()
-                                            + " "
-                                            + request.getRequestValue()
-                                            + "] = "
-                                            + ((DynamoRequestPacket) response).getResponsePacket()
-                                            + " received in "
-                                            + (System.currentTimeMillis() - createTime)
-                                            + "ms");
-                            if(!stateReceived.isEmpty()){
-                                if(!stateReceived.equals(((DynamoRequestPacket) response).getResponsePacket().getValue())){
-                                    passed.set(false);
-                                }
-                            }
-                            else {
-                                stateReceived = ((DynamoRequestPacket) response).getResponsePacket().getValue();
-                            }
-                            responseCounter.set(responseCounter.get()+1);
-                            return (DynamoRequestPacket) response;
-                        }
-                    });
+    public static DynamoRequestPacket makeGetRequest(TESTDynamoClient dc, int item) {
+        JSONObject jsonObject = new JSONObject();
+        String getString;
+        if(item == -1) {
+            int randomNum = (int) (Math.random() * ((dc.items.length - 1) + 1));
+            getString = dc.items[randomNum];
         }
-        while (responseCounter.get() != ports.length){
-            System.out.println(responseCounter.get()+" "+ports.length);
-            Thread.sleep(100);
+        else {
+            getString = dc.items[item];
         }
-        return passed.get();
+        try {
+            jsonObject.put("key", getString);
+        } catch (JSONException e) {
+            throw new RuntimeException(e);
+        }
+        return new DynamoRequestPacket((long) (Math.random() * Integer.MAX_VALUE),
+                jsonObject.toString(), DynamoRequestPacket.DynamoPacketType.GET, DynamoManager.getDefaultServiceName());
     }
-    @Test
-    public void sendingPutRequests() throws IOException, InterruptedException {
-        TESTDynamoClient testDynamoClient = new TESTDynamoClient();
-        for (int i = 0; i < 50; i++) {
-            try {
-                DynamoRequestPacket request = makePutRequest(testDynamoClient);
-                log.log(Level.INFO, "Sent write request from client 0");
-                testDynamoClient.sendRequest(request,
-                        new InetSocketAddress("localhost", testDynamoClient.ports[(int) (Math.random() * (testDynamoClient.ports.length))]),
-                        new Callback<Request, DynamoRequestPacket>() {
+    public boolean isDominant(HashMap<Integer, Integer> vectorClock, String object, boolean isGETRequest){
+        if(!objectToVectorClock.containsKey(object)){
+            if(!isGETRequest) putInObjectVectorClock(vectorClock, object);
+            return true;
+        }
+        int difference = 0;
+        for (int key : vectorClock.keySet()) {
+            difference += vectorClock.get(key) - objectToVectorClock.get(object).get(key);
+        }
+        if(difference < 0){
+            return false;
+        }
+        if(!isGETRequest) putInObjectVectorClock(vectorClock, object);
+        return true;
+    }
+    private void putInObjectVectorClock(HashMap<Integer, Integer> vectorClock, String object){
+        HashMap<Integer, Integer> vc = new HashMap<>();
+        for(int key: vectorClock.keySet()){
+            vc.put(key, vectorClock.get(key));
+        }
+        objectToVectorClock.put(object, vc);
+    }
+    public boolean checkNumberOfRequests(String responseFromApp, String object, boolean isGetRequest){
+        if (isGetRequest) {
+            return Integer.parseInt(responseFromApp) == objectToNumberOfEntries.get(object);
+        }
+        return true;
+    }
+    public void sendAppRequest(DynamoRequestPacket request, int port) throws IOException, InterruptedException{
+        if(request.getRequestType() == DynamoRequestPacket.DynamoPacketType.PUT){
+            objectToNumberOfEntries.put(request.getRequestValue(), objectToNumberOfEntries.getOrDefault(request.getRequestValue(), 0) + 1);
+        }
+        this.sendRequest(request,
+                new InetSocketAddress("localhost", port),
+                new Callback<Request, DynamoRequestPacket>() {
 
-                            long createTime = System.currentTimeMillis();
+                    long createTime = System.currentTimeMillis();
 
-                            @Override
-                            public DynamoRequestPacket processResponse(Request response) {
-                                assert (response instanceof DynamoRequestPacket) :
-                                        response.getSummary();
+                    @Override
+                    public DynamoRequestPacket processResponse(Request response) {
+                        assert (response instanceof DynamoRequestPacket) :
+                                response.getSummary();
 
-                                log.log(Level.INFO, "Response for request ["
+                        log.log(Level.INFO, "Response for request ["
+                                + request.getSummary()
+                                + " "
+                                + request.getRequestValue()
+                                + "] = "
+                                + ((DynamoRequestPacket) response).getResponsePacket()
+                                + " received in "
+                                + (System.currentTimeMillis() - createTime)
+                                + "ms");
+                        System.out
+                                .println("Response for request ["
                                         + request.getSummary()
                                         + " "
                                         + request.getRequestValue()
@@ -160,28 +151,11 @@ public class TESTDynamoClient extends ReconfigurableAppClientAsync<DynamoRequest
                                         + " received in "
                                         + (System.currentTimeMillis() - createTime)
                                         + "ms");
-                                System.out
-                                        .println("Response for request ["
-                                                + request.getSummary()
-                                                + " "
-                                                + request.getRequestValue()
-                                                + "] = "
-                                                + ((DynamoRequestPacket) response).getResponsePacket()
-                                                + " received in "
-                                                + (System.currentTimeMillis() - createTime)
-                                                + "ms");
-//                                    passed.set(passed.get() & testDynamoClient.checkRequestVectorClock(((MRRequestPacket) response).getResponseVectorClock()));
-//                                    testDynamoClient.updateWrites(((MRRequestPacket) response), testDynamoClient);
-                                return (DynamoRequestPacket) response;
-                            }
-                        });
-                Thread.sleep(100);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        };
-        Thread.sleep(1000);
-        Assert.assertTrue(allStateEqual());
+                        passed.set(passed.get() & isDominant(((DynamoRequestPacket) response).getResponsePacket().getVectorClock(), request.getRequestValue(), request.getRequestType() == DynamoRequestPacket.DynamoPacketType.GET));
+                        passed.set(passed.get() & checkNumberOfRequests(((DynamoRequestPacket) response).getResponsePacket().getValue(), request.getRequestValue(), request.getRequestType() == DynamoRequestPacket.DynamoPacketType.GET));
+                        return (DynamoRequestPacket) response;
+                    }
+                });
     }
 
 

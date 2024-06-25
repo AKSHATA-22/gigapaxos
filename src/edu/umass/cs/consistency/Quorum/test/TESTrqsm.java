@@ -1,4 +1,4 @@
-package edu.umass.cs.consistency.Quorum;
+package edu.umass.cs.consistency.Quorum.test;
 
 import edu.umass.cs.consistency.EventualConsistency.DynamoManager;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
@@ -6,19 +6,19 @@ import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import java.util.ArrayList;
 import java.util.Set;
 
-public class ReplicatedQuorumStateMachine {
+public class TESTrqsm {
     private ArrayList<Integer> quorumMembers; // from head to tail
     private final int readQuorum;
     private final int writeQuorum;
 
     private final String quorumID;
     private final int version;
-    private QuorumManager<?> quorumManager = null;
+    private QuorumTESTManager<?> quorumManager = null;
     private DynamoManager<?> dynamoManager = null;
 
-    public ReplicatedQuorumStateMachine(String quorumID, int version, int id,
+    public TESTrqsm(String quorumID, int version, int id,
                                         Set<Integer> members, Replicable app, String initialState,
-                                        QuorumManager<?> qm){
+                                        QuorumTESTManager<?> qm){
         this.quorumMembers = new ArrayList<Integer>(members);
         this.quorumID = quorumID;
         this.version = version;
@@ -37,7 +37,7 @@ public class ReplicatedQuorumStateMachine {
 //        restore yet to be implemented
 
     }
-    public ReplicatedQuorumStateMachine(String quorumID, int version, int id,
+    public TESTrqsm(String quorumID, int version, int id,
                                         Set<Integer> members, Replicable app, String initialState,
                                         DynamoManager<?> qm){
         this.quorumMembers = new ArrayList<Integer>(members);

@@ -25,6 +25,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import edu.umass.cs.consistency.lazyReplication.LazyReplicationApp;
 import edu.umass.cs.reconfiguration.examples.noopsimple.NoopApp;
 import org.json.JSONException;
@@ -234,7 +235,7 @@ public abstract class AbstractReplicaCoordinator<NodeIDType> implements
 	protected boolean handleIncoming(Request request, ExecutedCallback callback) {
 		boolean handled = false;
 		// check if coordination on request before unwrapping
-		System.out.println(needsCoordination(request));
+//		System.out.println(needsCoordination(request));
 		if (needsCoordination(request)) {
 			try {
 				if (request instanceof ReplicableRequest)
@@ -424,7 +425,7 @@ public abstract class AbstractReplicaCoordinator<NodeIDType> implements
 		: app.restore(name, state);
 	}
 	@Override
-	public Request reconcile(ArrayList<Request> requests) {
+	public GraphNode reconcile(ArrayList<GraphNode> requests) {
 		return app.reconcile(requests);
 	}
 

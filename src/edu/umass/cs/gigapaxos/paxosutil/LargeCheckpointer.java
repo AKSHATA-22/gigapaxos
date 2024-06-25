@@ -25,6 +25,7 @@ import java.util.concurrent.ThreadFactory;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -828,7 +829,7 @@ public class LargeCheckpointer {
 			}
 
 			@Override
-			public Request reconcile(ArrayList<Request> requests) {
+			public GraphNode reconcile(ArrayList<GraphNode> requests) {
 				return pi.reconcile(requests);
 			}
 

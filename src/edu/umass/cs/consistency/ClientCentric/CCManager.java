@@ -1,4 +1,4 @@
-package edu.umass.cs.consistency.MonotonicReads;
+package edu.umass.cs.consistency.ClientCentric;
 
 import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
@@ -19,12 +19,12 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class MRManager<NodeIDType> {
+public class CCManager<NodeIDType> {
     private final PaxosMessenger<NodeIDType> messenger;
     private final int myID;
     private final Replicable myApp;
     private final FailureDetection<NodeIDType> FD;
-    private final HashMap<String, MRReplicatedStateMachine> replicatedSM = new HashMap<>();
+    private final HashMap<String, CCReplicatedStateMachine> replicatedSM = new HashMap<>();
     private final HashMap<String, ArrayList<Write>> writesByServer = new HashMap<>();
     private final HashMap<String, HashMap<Integer, Timestamp>> wvc = new HashMap<>();
     private HashMap<Long, MRRequestAndCallback> requestsReceived = new HashMap<Long, MRRequestAndCallback>();
@@ -33,10 +33,10 @@ public class MRManager<NodeIDType> {
     public final Stringifiable<NodeIDType> unstringer;
     private final LargeCheckpointer largeCheckpointer;
     private static final Logger log = Logger.getLogger(ReconfigurationConfig.class.getName());
-    public static final Class<?> application = MRApp.class;
-    public MRManager(NodeIDType id, Stringifiable<NodeIDType> unstringer,
-                         InterfaceNIOTransport<NodeIDType, JSONObject> niot, Replicable instance,
-                         String logFolder, boolean enableNullCheckpoints) {
+    public static final Class<?> application = CCApp.class;
+    public CCManager(NodeIDType id, Stringifiable<NodeIDType> unstringer,
+                     InterfaceNIOTransport<NodeIDType, JSONObject> niot, Replicable instance,
+                     String logFolder, boolean enableNullCheckpoints) {
         this.myID = this.integerMap.put(id);
 
         this.unstringer = unstringer;
@@ -115,25 +115,25 @@ public class MRManager<NodeIDType> {
      * 4. pq - priority queue which will contain all the response writes ordered by their timestamp
      */
     public class MRRequestAndCallback {
-        protected MRRequestPacket mrRequestPacket;
+        protected CCRequestPacket CCRequestPacket;
         final ExecutedCallback callback;
         protected Set<Integer> requestSent = new HashSet<>();
         PriorityQueue<Write> pq = new PriorityQueue<Write>(new WriteComparator());
 
-        MRRequestAndCallback(MRRequestPacket mrRequestPacket, ExecutedCallback callback){
-            this.mrRequestPacket = new MRRequestPacket(mrRequestPacket.getRequestID(), mrRequestPacket.getPacketType(), mrRequestPacket);
+        MRRequestAndCallback(CCRequestPacket CCRequestPacket, ExecutedCallback callback){
+            this.CCRequestPacket = new CCRequestPacket(CCRequestPacket.getRequestID(), CCRequestPacket.getPacketType(), CCRequestPacket);
             this.callback = callback;
         }
 
         @Override
         public String toString(){
-            return this.mrRequestPacket +" ["+ callback+"]";
+            return this.CCRequestPacket +" ["+ callback+"]";
         }
 //        Once an ack is received the response writes are added to the priority queue. Return true if the requestSent set is empty.
-        public boolean ackReceived(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
-            removeReqFromSet(mrRequestPacket.getSource());
-            if(!mrRequestPacket.getResponseWrites().isEmpty()) {
-                this.addWrites(mrRequestPacket.getResponseWrites().get(mrRequestPacket.getSource()));
+        public boolean ackReceived(CCRequestPacket CCRequestPacket, CCReplicatedStateMachine mrsm){
+            removeReqFromSet(CCRequestPacket.getSource());
+            if(!CCRequestPacket.getResponseWrites().isEmpty()) {
+                this.addWrites(CCRequestPacket.getResponseWrites().get(CCRequestPacket.getSource()));
             }
             if (this.requestSent.isEmpty()){
                 return true;
@@ -141,18 +141,18 @@ public class MRManager<NodeIDType> {
             return false;
         }
         public boolean isWrite(){
-            System.out.println("isWrite: "+this.mrRequestPacket.getPacketType()+(this.mrRequestPacket.getPacketType() == MRRequestPacket.MRPacketType.WRITE));
-            return this.mrRequestPacket.getPacketType() == MRRequestPacket.MRPacketType.WRITE;
+//            System.out.println("isWrite: "+this.CCRequestPacket.getPacketType()+(this.CCRequestPacket.getPacketType() == edu.umass.cs.consistency.MonotonicReads.CCRequestPacket.CCPacketType.WRITE));
+            return this.CCRequestPacket.getPacketType() == edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.MR_WRITE || this.CCRequestPacket.getPacketType() == edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.MW_WRITE;
         }
         public void addCurrentIfNeeded(Integer nodeID, Timestamp ts){
-            if(this.mrRequestPacket.getPacketType() == MRRequestPacket.MRPacketType.WRITE){
-                this.mrRequestPacket.addResponseWrites(nodeID, ts, this.mrRequestPacket.getRequestValue());
+            if(this.CCRequestPacket.getPacketType() == edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.MW_WRITE || this.CCRequestPacket.getPacketType() == edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.MR_WRITE){
+                this.CCRequestPacket.addResponseWrites(nodeID, ts, this.CCRequestPacket.getRequestValue());
             }
         }
         public void setResponse(HashMap<Integer, Timestamp> responseVectorClock, String responseValue){
-            this.mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.RESPONSE);
-            this.mrRequestPacket.setResponseVectorClock(responseVectorClock);
-            this.mrRequestPacket.setResponseValue(responseValue);
+            this.CCRequestPacket.setPacketType(edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.RESPONSE);
+            this.CCRequestPacket.setResponseVectorClock(responseVectorClock);
+            this.CCRequestPacket.setResponseValue(responseValue);
         }
         public void removeReqFromSet(Integer node){
             this.requestSent.remove(node);
@@ -166,8 +166,8 @@ public class MRManager<NodeIDType> {
         public void addWrites(ArrayList<Write> arrayListToAdd){
             this.pq.addAll(arrayListToAdd);
         }
-        public MRRequestPacket getMrRequestPacket() {
-            return this.mrRequestPacket;
+        public CCRequestPacket getMrRequestPacket() {
+            return this.CCRequestPacket;
         }
 
         public Integer getRequestSentLength() {
@@ -175,16 +175,22 @@ public class MRManager<NodeIDType> {
             return requestSent.size();
         }
     }
-    private void handlePacket(MRRequestPacket qp, MRReplicatedStateMachine mrsm, ExecutedCallback callback){
+    private void handlePacket(CCRequestPacket qp, CCReplicatedStateMachine mrsm, ExecutedCallback callback){
 
-        MRRequestPacket.MRPacketType packetType = qp.getType();
+        CCRequestPacket.CCPacketType packetType = qp.getType();
 
         switch(packetType) {
-            case READ:
-                handleReadRequest(qp, mrsm, callback);
+            case MR_READ:
+                handleReadRequestMR(qp, mrsm, callback);
                 break;
-            case WRITE:
+            case MR_WRITE:
                 handleWriteRequest(qp, mrsm, callback);
+                break;
+            case MW_WRITE:
+                handleWriteRequest(qp, mrsm, callback);
+                break;
+            case MW_READ:
+                handleReadRequestMW(qp, mrsm, callback);
                 break;
             case FWD:
                 handleFwdRequest(qp, mrsm);
@@ -203,135 +209,150 @@ public class MRManager<NodeIDType> {
 
     /**
      * If the vector clock of the request is greater gets the writes in that time, else handles the request as an ack
-     * @param mrRequestPacket
+     * @param CCRequestPacket
      * @param mrsm
      * @param callback
      */
-    private void handleReadRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm, ExecutedCallback callback){
-        System.out.println("Read received: ---"+mrRequestPacket);
-        this.requestsReceived.putIfAbsent(mrRequestPacket.getRequestID(), new MRRequestAndCallback(mrRequestPacket, callback));
-        if(!mrRequestPacket.getRequestVectorClock().isEmpty()){
-            mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD);
+    private void handleReadRequestMR(CCRequestPacket CCRequestPacket, CCReplicatedStateMachine mrsm, ExecutedCallback callback){
+        System.out.println("Read received: ---"+ CCRequestPacket);
+        this.requestsReceived.putIfAbsent(CCRequestPacket.getRequestID(), new MRRequestAndCallback(CCRequestPacket, callback));
+        if(!CCRequestPacket.getRequestVectorClock().isEmpty()){
+            CCRequestPacket.setPacketType(edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.FWD);
             for (int i = 0; i < mrsm.getMembers().size(); i++) {
-                if (mrsm.getMembers().get(i) != this.myID & mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)).compareTo(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i))) > 0) {
+                if (mrsm.getMembers().get(i) != this.myID & CCRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)).compareTo(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i))) > 0) {
                     if (!isNodeUp(mrsm.getMembers().get(i))){
-                        this.requestsReceived.get(mrRequestPacket.getRequestID()).addWrites(mrRequestPacket.getRequestWrites().get(mrsm.getMembers().get(i)));
+                        this.requestsReceived.get(CCRequestPacket.getRequestID()).addWrites(CCRequestPacket.getRequestWrites().get(mrsm.getMembers().get(i)));
                     }
                     else {
-                        mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
-                        mrRequestPacket.setWritesTo(mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)));
-                        mrRequestPacket.setSource(this.myID);
-                        mrRequestPacket.setDestination(mrsm.getMembers().get(i));
-                        this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getDestination());
-                        this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
+                        CCRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
+                        CCRequestPacket.setWritesTo(CCRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)));
+                        CCRequestPacket.setSource(this.myID);
+                        CCRequestPacket.setDestination(mrsm.getMembers().get(i));
+                        this.requestsReceived.get(CCRequestPacket.getRequestID()).addReqToSet(CCRequestPacket.getDestination());
+                        this.sendRequest(CCRequestPacket, CCRequestPacket.getDestination());
                     }
                 }
             }
         }
-        if(mrRequestPacket.getRequestVectorClock().isEmpty() || this.requestsReceived.get(mrRequestPacket.getRequestID()).getRequestSentLength() == 0) {
+        if(CCRequestPacket.getRequestVectorClock().isEmpty() || this.requestsReceived.get(CCRequestPacket.getRequestID()).getRequestSentLength() == 0) {
             System.out.println("Request vector clock is empty");
-            mrRequestPacket.setResponseVectorClock(this.wvc.get(mrsm.getServiceName()));
-            mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
-            mrRequestPacket.setSource(this.myID);
-            this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getSource());
-            handlePacket(mrRequestPacket, mrsm, callback);
+            CCRequestPacket.setResponseVectorClock(this.wvc.get(mrsm.getServiceName()));
+            CCRequestPacket.setPacketType(edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.FWD_ACK);
+            CCRequestPacket.setSource(this.myID);
+            this.requestsReceived.get(CCRequestPacket.getRequestID()).addReqToSet(CCRequestPacket.getSource());
+            handlePacket(CCRequestPacket, mrsm, callback);
         }
     }
 
     /**
-     * If the vector clock of the request is greater gets all the writes after it, else handles the request as an ack
-     * @param mrRequestPacket
+     * For monotonic writes the read request is directly executed
+     * @param CCRequestPacket
      * @param mrsm
      * @param callback
      */
-    private void handleWriteRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm, ExecutedCallback callback){
-        System.out.println("Write received:---"+mrRequestPacket);
-        this.requestsReceived.putIfAbsent(mrRequestPacket.getRequestID(), new MRRequestAndCallback(mrRequestPacket, callback));
-        if(!mrRequestPacket.getRequestVectorClock().isEmpty()) {
-            mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD);
+    private void handleReadRequestMW(CCRequestPacket CCRequestPacket, CCReplicatedStateMachine mrsm, ExecutedCallback callback){
+        this.requestsReceived.putIfAbsent(CCRequestPacket.getRequestID(), new MRRequestAndCallback(CCRequestPacket, callback));
+        CCRequestPacket.setResponseVectorClock(this.wvc.get(mrsm.getServiceName()));
+        CCRequestPacket.setPacketType(edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.FWD_ACK);
+        CCRequestPacket.setSource(this.myID);
+        this.requestsReceived.get(CCRequestPacket.getRequestID()).addReqToSet(CCRequestPacket.getSource());
+        handlePacket(CCRequestPacket, mrsm, callback);
+    }
+
+    /**
+     * If the vector clock of the request is greater gets all the writes after it, else handles the request as an ack
+     * @param CCRequestPacket
+     * @param mrsm
+     * @param callback
+     */
+    private void handleWriteRequest(CCRequestPacket CCRequestPacket, CCReplicatedStateMachine mrsm, ExecutedCallback callback){
+        System.out.println("Write received:---"+ CCRequestPacket);
+        this.requestsReceived.putIfAbsent(CCRequestPacket.getRequestID(), new MRRequestAndCallback(CCRequestPacket, callback));
+        if(!CCRequestPacket.getRequestVectorClock().isEmpty()) {
+            CCRequestPacket.setPacketType(edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.FWD);
             for (int i = 0; i < mrsm.getMembers().size(); i++) {
-                if (mrRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)).compareTo(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i))) > 0) {
+                if (CCRequestPacket.getRequestVectorClock().get(mrsm.getMembers().get(i)).compareTo(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i))) > 0) {
                     if (!isNodeUp(mrsm.getMembers().get(i))){
-                        this.requestsReceived.get(mrRequestPacket.getRequestID()).addWrites(mrRequestPacket.getRequestWrites().get(mrsm.getMembers().get(i)));
+                        this.requestsReceived.get(CCRequestPacket.getRequestID()).addWrites(CCRequestPacket.getRequestWrites().get(mrsm.getMembers().get(i)));
                     }
                     else {
-                        mrRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
-                        mrRequestPacket.setSource(this.myID);
-                        mrRequestPacket.setDestination(mrsm.getMembers().get(i));
-                        this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getDestination());
-                        this.sendRequest(new MRRequestPacket(mrRequestPacket.getRequestID(), mrRequestPacket.getPacketType(), mrRequestPacket), mrRequestPacket.getDestination());
+                        CCRequestPacket.setWritesFrom(this.wvc.get(mrsm.getServiceName()).get(mrsm.getMembers().get(i)));
+                        CCRequestPacket.setSource(this.myID);
+                        CCRequestPacket.setDestination(mrsm.getMembers().get(i));
+                        this.requestsReceived.get(CCRequestPacket.getRequestID()).addReqToSet(CCRequestPacket.getDestination());
+                        this.sendRequest(new CCRequestPacket(CCRequestPacket.getRequestID(), CCRequestPacket.getPacketType(), CCRequestPacket), CCRequestPacket.getDestination());
                     }
                 }
             }
         }
-        if (mrRequestPacket.getRequestVectorClock().isEmpty() || this.requestsReceived.get(mrRequestPacket.getRequestID()).getRequestSentLength() == 0) {
-                mrRequestPacket.setResponseVectorClock(this.wvc.get(mrsm.getServiceName()));
-                mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
-                mrRequestPacket.setSource(this.myID);
-                this.requestsReceived.get(mrRequestPacket.getRequestID()).addReqToSet(mrRequestPacket.getSource());
-                this.handlePacket(mrRequestPacket, mrsm, callback);
+        if (CCRequestPacket.getRequestVectorClock().isEmpty() || this.requestsReceived.get(CCRequestPacket.getRequestID()).getRequestSentLength() == 0) {
+                CCRequestPacket.setResponseVectorClock(this.wvc.get(mrsm.getServiceName()));
+                CCRequestPacket.setPacketType(edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.FWD_ACK);
+                CCRequestPacket.setSource(this.myID);
+                this.requestsReceived.get(CCRequestPacket.getRequestID()).addReqToSet(CCRequestPacket.getSource());
+                this.handlePacket(CCRequestPacket, mrsm, callback);
         }
 
     }
 
     /**
      * Adds writes from own write set to the response
-     * @param mrRequestPacket
+     * @param CCRequestPacket
      * @param mrsm
      */
-    private void handleFwdRequest(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
-        this.heardFrom(mrRequestPacket.getSource());
-        mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.FWD_ACK);
-        if (mrRequestPacket.getWritesTo().equals(new Timestamp(0))){
-            mrRequestPacket.setWritesTo(new Timestamp(System.currentTimeMillis()));
+    private void handleFwdRequest(CCRequestPacket CCRequestPacket, CCReplicatedStateMachine mrsm){
+        this.heardFrom(CCRequestPacket.getSource());
+        CCRequestPacket.setPacketType(edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.FWD_ACK);
+        if (CCRequestPacket.getWritesTo().equals(new Timestamp(0))){
+            CCRequestPacket.setWritesTo(new Timestamp(System.currentTimeMillis()));
         }
-        System.out.println("handle forward received:---"+mrRequestPacket);
+        System.out.println("handle forward received:---"+ CCRequestPacket);
         for (Write write: this.writesByServer.get(mrsm.getServiceName())){
             System.out.println("------------------------------------"+write);
-            if((write.getTs().compareTo(mrRequestPacket.getWritesFrom()) >= 0) & (write.getTs().compareTo(mrRequestPacket.getWritesTo()) <= 0)){
+            if((write.getTs().compareTo(CCRequestPacket.getWritesFrom()) >= 0) & (write.getTs().compareTo(CCRequestPacket.getWritesTo()) <= 0)){
                 System.out.println("Adding to response writes: "+write.getStatement());
-                mrRequestPacket.addResponseWrites(this.myID, write.getTs(), write.getStatement());
+                CCRequestPacket.addResponseWrites(this.myID, write.getTs(), write.getStatement());
             }
         }
-        int dest = mrRequestPacket.getDestination();
-        mrRequestPacket.setDestination(mrRequestPacket.getSource());
-        mrRequestPacket.setSource(dest);
-        this.sendRequest(mrRequestPacket, mrRequestPacket.getDestination());
+        int dest = CCRequestPacket.getDestination();
+        CCRequestPacket.setDestination(CCRequestPacket.getSource());
+        CCRequestPacket.setSource(dest);
+        this.sendRequest(CCRequestPacket, CCRequestPacket.getDestination());
     }
 
     /**
      * If writes from all nodes are received, executes the writes in the priority queue. Updates vector clock and write set if needed
-     * @param mrRequestPacket
+     * @param CCRequestPacket
      * @param mrsm
      */
-    private void handleFwdAck(MRRequestPacket mrRequestPacket, MRReplicatedStateMachine mrsm){
-        this.heardFrom(mrRequestPacket.getSource());
-        System.out.println("handle forward ack received:--"+mrRequestPacket);
-        if(this.requestsReceived.get(mrRequestPacket.getRequestID()).ackReceived(mrRequestPacket, mrsm)){
-            for (Write write : this.requestsReceived.get(mrRequestPacket.getRequestID()).getPq()){
-                mrRequestPacket.setPacketType(MRRequestPacket.MRPacketType.WRITE);
-                mrRequestPacket.setRequestValue(write.getStatement());
+    private void handleFwdAck(CCRequestPacket CCRequestPacket, CCReplicatedStateMachine mrsm){
+        this.heardFrom(CCRequestPacket.getSource());
+        System.out.println("handle forward ack received:--"+ CCRequestPacket);
+        if(this.requestsReceived.get(CCRequestPacket.getRequestID()).ackReceived(CCRequestPacket, mrsm)){
+            for (Write write : this.requestsReceived.get(CCRequestPacket.getRequestID()).getPq()){
+                CCRequestPacket.setPacketType(edu.umass.cs.consistency.ClientCentric.CCRequestPacket.CCPacketType.MW_WRITE);
+                CCRequestPacket.setRequestValue(write.getStatement());
                 this.wvc.get(mrsm.getServiceName()).put(write.getNode(), write.getTs());
-                Request request = getInterfaceRequest(this.myApp, mrRequestPacket.toString());
+                Request request = getInterfaceRequest(this.myApp, CCRequestPacket.toString());
                 this.myApp.execute(request, false);
             }
             Timestamp ts = new Timestamp(System.currentTimeMillis());
             System.out.println("after execution: "+this.wvc.get(mrsm.getServiceName()));
-            this.requestsReceived.get(mrRequestPacket.getRequestID()).addCurrentIfNeeded(this.myID, ts);
-            Request request = getInterfaceRequest(this.myApp, this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket().toString());
+            this.requestsReceived.get(CCRequestPacket.getRequestID()).addCurrentIfNeeded(this.myID, ts);
+            Request request = getInterfaceRequest(this.myApp, this.requestsReceived.get(CCRequestPacket.getRequestID()).getMrRequestPacket().toString());
             this.myApp.execute(request, false);
             assert request != null;
-            if (this.requestsReceived.get(mrRequestPacket.getRequestID()).isWrite()) {
-                if(((MRRequestPacket)request).getResponseValue().equals("EXECUTED")) {
+            if (this.requestsReceived.get(CCRequestPacket.getRequestID()).isWrite()) {
+                if(((CCRequestPacket)request).getResponseValue().equals("EXECUTED")) {
                     this.wvc.get(mrsm.getServiceName()).put(this.myID, ts);
-                    this.writesByServer.get(mrsm.getServiceName()).add(new Write(ts, this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket().getRequestValue(), this.myID));
+                    this.writesByServer.get(mrsm.getServiceName()).add(new Write(ts, this.requestsReceived.get(CCRequestPacket.getRequestID()).getMrRequestPacket().getRequestValue(), this.myID));
                 }
             }
-            this.requestsReceived.get(mrRequestPacket.getRequestID()).setResponse(this.wvc.get(mrsm.getServiceName()), ((MRRequestPacket)request).getResponseValue());
-            sendResponse(mrRequestPacket.getRequestID(), this.requestsReceived.get(mrRequestPacket.getRequestID()).getMrRequestPacket());
+            this.requestsReceived.get(CCRequestPacket.getRequestID()).setResponse(this.wvc.get(mrsm.getServiceName()), ((CCRequestPacket)request).getResponseValue());
+            sendResponse(CCRequestPacket.getRequestID(), this.requestsReceived.get(CCRequestPacket.getRequestID()).getMrRequestPacket());
         }
     }
-    private void processFailureDetection(MRRequestPacket request) {
+    private void processFailureDetection(CCRequestPacket request) {
         try {
             FailureDetectionPacket<NodeIDType> failureDetectionPacket = new FailureDetectionPacket<>(new JSONObject(request.getRequestValue()), this.unstringer);
             FD.receive(failureDetectionPacket);
@@ -340,10 +361,10 @@ public class MRManager<NodeIDType> {
             System.out.println("Exception: "+e);
         }
     }
-    public void sendResponse(Long requestID, MRRequestPacket mrResponsePacket){
+    public void sendResponse(Long requestID, CCRequestPacket mrResponsePacket){
         MRRequestAndCallback requestAndCallback = this.requestsReceived.get(requestID);
         if (requestAndCallback != null && requestAndCallback.callback != null) {
-            mrResponsePacket.setPacketType(MRRequestPacket.MRPacketType.RESPONSE);
+            mrResponsePacket.setPacketType(CCRequestPacket.CCPacketType.RESPONSE);
             mrResponsePacket.setSource(this.myID);
 //            System.out.println("Sending resp packet: "+mrResponsePacket);
             requestAndCallback.callback.executed(mrResponsePacket
@@ -356,14 +377,14 @@ public class MRManager<NodeIDType> {
                     new Object[]{requestID});
         }
     }
-    private void sendRequest(MRRequestPacket mrRequestPacket,
+    private void sendRequest(CCRequestPacket CCRequestPacket,
                              int nodeID){
         GenericMessagingTask<NodeIDType,?> gTask = null;
-        System.out.println("sending req:--"+mrRequestPacket+" to node "+nodeID);
+        System.out.println("sending req:--"+ CCRequestPacket +" to node "+nodeID);
         try {
             // forward to nodeID
             gTask = new GenericMessagingTask(this.integerMap.get(nodeID),
-                    mrRequestPacket);
+                    CCRequestPacket);
             this.messenger.send(gTask);
         } catch (Exception e) {
             e.printStackTrace();
@@ -383,14 +404,14 @@ public class MRManager<NodeIDType> {
                                                   String state){
         return this.createReplicatedQuorumFinal(serviceName, version, nodes, app, state) != null;
     }
-    private synchronized MRReplicatedStateMachine createReplicatedQuorumFinal(
+    private synchronized CCReplicatedStateMachine createReplicatedQuorumFinal(
             String serviceName, int version, Set<NodeIDType> nodes,
             Replicable app, String initialState){
-        MRReplicatedStateMachine mrrsm = this.getInstance(serviceName);
+        CCReplicatedStateMachine mrrsm = this.getInstance(serviceName);
         if (mrrsm != null)
             return mrrsm;
         try {
-            mrrsm = new MRReplicatedStateMachine(serviceName, version, myID,
+            mrrsm = new CCReplicatedStateMachine(serviceName, version, myID,
                     this.integerMap.put(nodes), app != null ? app : this.myApp,
                     initialState, this);
             serviceNames.add(serviceName);
@@ -408,7 +429,7 @@ public class MRManager<NodeIDType> {
         return mrrsm;
     }
     public boolean deleteReplicatedQuorum(String serviceName, int epoch){
-        MRReplicatedStateMachine mrsm = this.getInstance(serviceName);
+        CCReplicatedStateMachine mrsm = this.getInstance(serviceName);
         if(mrsm == null)
             return true;
         if(mrsm.getVersion() > epoch) {
@@ -419,21 +440,21 @@ public class MRManager<NodeIDType> {
     public String propose(String serviceName, Request request,
                           ExecutedCallback callback) {
         System.out.println(request+"");
-        if(request.getRequestType() == MRRequestPacket.MRPacketType.FAILURE_DETECT){
-            this.handlePacket((MRRequestPacket)request, null, callback);
+        if(request.getRequestType() == CCRequestPacket.CCPacketType.FAILURE_DETECT){
+            this.handlePacket((CCRequestPacket)request, null, callback);
             return null;
         }
-        MRRequestPacket mrRequestPacket = this.getMRRequestPacket(request);
+        CCRequestPacket CCRequestPacket = this.getMRRequestPacket(request);
 
         boolean matched = false;
 
-        MRReplicatedStateMachine mrsm = this.getInstance(serviceName);
+        CCReplicatedStateMachine mrsm = this.getInstance(serviceName);
 
         if (mrsm != null) {
             matched = true;
-            assert mrRequestPacket != null;
-            mrRequestPacket.setServiceName(serviceName);
-            this.handlePacket(mrRequestPacket, mrsm, callback);
+            assert CCRequestPacket != null;
+            CCRequestPacket.setServiceName(serviceName);
+            this.handlePacket(CCRequestPacket, mrsm, callback);
         } else {
             System.out.println("The given quorumID "+serviceName+" has no state machine associated");
         }
@@ -441,22 +462,22 @@ public class MRManager<NodeIDType> {
 
         return matched ? mrsm.getServiceName() : null;
     }
-    private MRRequestPacket getMRRequestPacket(Request request){
+    private CCRequestPacket getMRRequestPacket(Request request){
         try {
-            return (MRRequestPacket) request;
+            return (CCRequestPacket) request;
         }
         catch (Exception e){
             System.out.println(e.toString());
         }
         return null;
     }
-    private MRReplicatedStateMachine getInstance(String quorumID){
+    private CCReplicatedStateMachine getInstance(String quorumID){
         return this.replicatedSM.get(quorumID);
     }
-    private void putInstance(String quorumID, MRReplicatedStateMachine mrrsm){
+    private void putInstance(String quorumID, CCReplicatedStateMachine mrrsm){
         this.replicatedSM.put(quorumID, mrrsm);
     }
-    private void putVectorClock(String serviceName, MRReplicatedStateMachine mrrsm){
+    private void putVectorClock(String serviceName, CCReplicatedStateMachine mrrsm){
         this.wvc.put(serviceName, new HashMap<Integer, Timestamp>());
         for (int i = 0; i < mrrsm.getMembers().size(); i++) {
             this.wvc.get(serviceName).put(mrrsm.getMembers().get(i), new Timestamp(0));
@@ -470,13 +491,13 @@ public class MRManager<NodeIDType> {
         return this.replicatedSM.remove(serviceName) != null;
     }
     public Integer getVersion(String quorumID) {
-        MRReplicatedStateMachine mrsm = this.getInstance(quorumID);
+        CCReplicatedStateMachine mrsm = this.getInstance(quorumID);
         if ( mrsm != null)
             return (int) mrsm.getVersion();
         return -1;
     }
     public Set<NodeIDType> getReplicaGroup(String serviceName) {
-        MRReplicatedStateMachine mrsm = this.getInstance(serviceName);
+        CCReplicatedStateMachine mrsm = this.getInstance(serviceName);
         if (mrsm == null)
             return null;
         return this.integerMap.getIntArrayAsNodeSet(mrsm.getMembersArray());

@@ -57,6 +57,7 @@ import java.util.logging.Logger;
 
 import javax.sql.DataSource;
 
+import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -904,7 +905,7 @@ public class SQLReconfiguratorDB<NodeIDType> extends
 	}
 
 	@Override
-	public Request reconcile(ArrayList<Request> requests) {
+	public GraphNode reconcile(ArrayList<GraphNode> requests) {
 		System.out.println("Returning null from SQLReconfiguratorDB");
 		return null;
 	}

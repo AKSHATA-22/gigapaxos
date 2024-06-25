@@ -16,9 +16,7 @@
 package edu.umass.cs.reconfiguration;
 
 import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -26,13 +24,11 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.logging.Level;
 
 import edu.umass.cs.consistency.EventualConsistency.DynamoCoordinator;
-import edu.umass.cs.consistency.MonotonicReads.MRCoordinator;
+import edu.umass.cs.consistency.ClientCentric.CCCoordinator;
 import edu.umass.cs.consistency.Quorum.QuorumCoordinator;
 import edu.umass.cs.consistency.lazyReplication.LazyReplicationCoordinator;
 import edu.umass.cs.nio.NIOTransport;
 import edu.umass.cs.nio.interfaces.SSLMessenger;
-import edu.umass.cs.nio.interfaces.Stringifiable;
-import edu.umass.cs.reconfiguration.interfaces.ReplicaCoordinator;
 import org.json.JSONObject;
 
 import edu.umass.cs.gigapaxos.AbstractPaxosLogger;
@@ -229,8 +225,8 @@ public abstract class ReconfigurableNode<NodeIDType> {
 			return new QuorumCoordinator<>(app, myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
 		else if (coordinatorClassName.equals("edu.umass.cs.consistency.EventualConsistency.DynamoCoordinator"))
 			return new DynamoCoordinator<>(app, myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
-		else if (coordinatorClassName.equals("edu.umass.cs.consistency.MonotonicReads.MRCoordinator"))
-			return new MRCoordinator<>(app, myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
+		else if (coordinatorClassName.equals("edu.umass.cs.consistency.ClientCentric.CCCoordinator"))
+			return new CCCoordinator<>(app, myID, nodeConfig, (SSLMessenger<NodeIDType, JSONObject>) messenger);
 		return null;
 
 		// FIXME: instantiating {@link ReplicaCoordinator} with Generic type

@@ -21,6 +21,7 @@ import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.Set;
 
+import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import edu.umass.cs.gigapaxos.interfaces.*;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
 import edu.umass.cs.nio.nioutils.NIOHeader;
@@ -130,7 +131,7 @@ public class TrivialRepliconfigurable implements Repliconfigurable, AppRequestPa
 	}
 
 	@Override
-	public Request reconcile(ArrayList<Request> requests) {
+	public GraphNode reconcile(ArrayList<GraphNode> requests) {
 		if(this.app instanceof Reconcilable)
 			return ((Reconcilable)this.app).reconcile(requests);
 		throw new RuntimeException("Can not get reconcile request for a non-reconcilable app");

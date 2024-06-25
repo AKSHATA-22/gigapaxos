@@ -1,5 +1,6 @@
 package edu.umass.cs.consistency.EventualConsistency;
 
+import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import edu.umass.cs.gigapaxos.interfaces.ClientRequest;
 import edu.umass.cs.nio.JSONPacket;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
@@ -32,12 +33,20 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
     private Timestamp timestamp = new Timestamp(0);
     static class DynamoPacket{
         HashMap<Integer, Integer> vectorClock = new HashMap<>();
+        HashMap<Long, String> allRequests = new HashMap<>();
         String value;
         DynamoPacket(HashMap<Integer, Integer> vectorClock, String value){
             this.vectorClock = vectorClock;
             this.value = value;
         }
-
+        DynamoPacket(HashMap<Integer, Integer> vectorClock, String value, HashMap<Long, String> allRequests){
+            this.allRequests = allRequests;
+            this.vectorClock = vectorClock;
+            this.value = value;
+        }
+        public void setAllRequests(HashMap<Long, String> allRequests) {
+            this.allRequests = allRequests;
+        }
         public HashMap<Integer, Integer> getVectorClock() {
             return vectorClock;
         }
@@ -56,12 +65,18 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         public void setValue(String value) {
             this.value = value;
         }
+
+        public HashMap<Long, String> getAllRequests() {
+            return allRequests;
+        }
+
         @Override
         public String toString(){
             JSONObject json = new JSONObject();
             try {
                 json.put("vectorClock", this.vectorClock);
                 json.put("value", this.value);
+                json.put("allRequests", this.allRequests);
             } catch (JSONException e) {
                 throw new RuntimeException(e);
             }
@@ -75,10 +90,9 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         }
         return responseStr;
     }
-    public DynamoPacket strToDynamoPck(String str){
+    public DynamoPacket strToDynamoPck(JSONObject json){
         try {
-            JSONObject json = new JSONObject(str);
-            JSONObject vectorClockStr = new JSONObject(json.getString("vectorClock"));
+            JSONObject vectorClockStr = new JSONObject(json.getString("dynamoPacketVectorClock"));
             HashMap<Integer, Integer> vectorClock = new HashMap<>();
             if (vectorClockStr.length() != 0) {
                 for (Iterator it = vectorClockStr.keys(); it.hasNext(); ) {
@@ -86,10 +100,19 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
                     vectorClock.put(i, Integer.parseInt(vectorClockStr.get(String.valueOf(i)).toString()));
                 }
             }
-            System.out.println(vectorClock);
-            return new DynamoPacket(vectorClock, json.getString("value"));
+            JSONObject allRequestsStr = new JSONObject(json.getString("dynamoPacketAllRequests"));
+            HashMap<Long, String> allRequests = new HashMap<>();
+            if (allRequestsStr.length() != 0) {
+                for (Iterator it = allRequestsStr.keys(); it.hasNext(); ) {
+                    long i = Long.parseLong(it.next().toString());
+                    allRequests.put(i, allRequestsStr.get(String.valueOf(i)).toString());
+                }
+            }
+//            System.out.println(vectorClock);
+            return new DynamoPacket(vectorClock, json.getString("dynamoPacketValue"), allRequests);
         } catch (JSONException e) {
-            throw new RuntimeException(e);
+//            e.printStackTrace();
+            return null;
         }
     }
     public DynamoPacket getResponsePacket(){
@@ -130,12 +153,20 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
                 }
             }
         }
+
+        public String getLabel() {
+            return label;
+        }
+
         @Override
         public int getInt() {
             return this.number;
         }
         public static DynamoPacketType getDynamoPacketType(int type){
             return DynamoPacketType.numbers.get(type);
+        }
+        public static DynamoPacketType getDynamoPacketType(String label){
+            return DynamoPacketType.labels.get(label);
         }
 
     }
@@ -148,6 +179,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         if(req == null)
             return;
         this.responsePacket = req.responsePacket;
+        this.requestVectorClock = req.requestVectorClock;
         this.requestValue = req.requestValue;
         this.quorumID = req.quorumID;
         this.destination = req.destination;
@@ -161,14 +193,8 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         this.packetType = DynamoPacketType.getDynamoPacketType(json.getInt("type"));
         this.requestID = json.getLong("requestID");
         this.requestValue = json.getString("requestValue");
-        this.responsePacket = new DynamoPacket(new HashMap<>(), json.getString("dynamoPacketValue"));
-        JSONObject vectorClock = new JSONObject(json.getString("dynamoPacketVectorClock"));
-        if (vectorClock.length() != 0) {
-            for (Iterator it = vectorClock.keys(); it.hasNext(); ) {
-                int i = Integer.parseInt(it.next().toString());
-                this.responsePacket.addEntryInVectorClock(i, Integer.parseInt(vectorClock.get(String.valueOf(i)).toString()));
-            }
-        }
+        DynamoPacket dynamoPacket = this.strToDynamoPck(json);
+        this.responsePacket = dynamoPacket != null ? dynamoPacket : new DynamoPacket(new HashMap<>(), "", new HashMap<>());
         JSONObject requestVectorClock = new JSONObject(json.getString("requestVectorClock"));
         if (requestVectorClock.length() != 0) {
             for (Iterator it = requestVectorClock.keys(); it.hasNext(); ) {
@@ -179,10 +205,6 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         this.source = json.getInt("source");
         this.destination = json.getInt("destination");
         this.quorumID = json.getString("quorumID");
-        JSONArray jarray = json.getJSONArray("response");
-        for (int i = 0; i < jarray.length() ;i++){
-            this.response.add(this.strToDynamoPck(jarray.get(i).toString()));
-        }
         this.timestamp = Timestamp.valueOf(json.getString("ts"));
     }
 
@@ -284,6 +306,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         if(this.responsePacket != null) {
             json.put("dynamoPacketVectorClock", this.responsePacket.getVectorClock());
             json.put("dynamoPacketValue", this.responsePacket.getValue());
+            json.put("dynamoPacketAllRequests", this.responsePacket.getAllRequests());
         }
         else {
             json.put("dynamoPacketVectorClock", new JSONObject());

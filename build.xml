@@ -319,7 +319,7 @@ command line with -Dclass="
   <target name="testMR" description="Runs the default integration test"
           depends="jar, compiletest">
     <junit printsummary="yes" fork="yes" haltonfailure="on" showoutput="yes">
-      <test name="edu.umass.cs.consistency.MonotonicReads.TESTMRClient"/>
+      <test name="edu.umass.cs.consistency.ClientCentric.TESTMRClient"/>
       <formatter type="plain" usefile="false"/>
       <jvmarg value="-ea"/>
       <jvmarg value="-Djava.util.logging.config.file=logging.properties"/>

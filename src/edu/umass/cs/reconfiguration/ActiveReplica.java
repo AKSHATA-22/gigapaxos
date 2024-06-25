@@ -36,8 +36,8 @@ import java.util.logging.Logger;
 
 import edu.umass.cs.consistency.EventualConsistency.DynamoRequestPacket;
 import edu.umass.cs.consistency.EventualConsistency.StatusReportPacket;
-import edu.umass.cs.consistency.MonotonicReads.FailureDetectionPacket;
-import edu.umass.cs.consistency.MonotonicReads.MRRequestPacket;
+import edu.umass.cs.consistency.ClientCentric.FailureDetectionPacket;
+import edu.umass.cs.consistency.ClientCentric.CCRequestPacket;
 import edu.umass.cs.consistency.Quorum.QuorumRequestPacket;
 import edu.umass.cs.reconfiguration.reconfigurationpackets.*;
 import org.json.JSONException;
@@ -1042,7 +1042,7 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 
 	private static final Request makeClientRequest(Request request,
 			InetSocketAddress csa) {
-		System.out.println(request instanceof QuorumRequestPacket);
+//		System.out.println(request instanceof QuorumRequestPacket);
 		if (request instanceof ReplicableClientRequest)
 			return ((ReplicableClientRequest) request).setClientAddress(csa);
 		else if (request instanceof RequestPacket)
@@ -1061,7 +1061,7 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 //			System.out.println("it is a dynamo packet");
 			return request;
 		}
-		else if (request instanceof MRRequestPacket) {
+		else if (request instanceof CCRequestPacket) {
 //			System.out.println("it is a dynamo packet");
 			return request;
 		}

@@ -1,6 +1,5 @@
-package edu.umass.cs.consistency.MonotonicReads;
+package edu.umass.cs.consistency.ClientCentric;
 
-import edu.umass.cs.gigapaxos.paxospackets.PaxosPacket;
 import edu.umass.cs.nio.MessageNIOTransport;
 import edu.umass.cs.nio.interfaces.Stringifiable;
 import org.json.JSONException;
@@ -8,7 +7,7 @@ import org.json.JSONObject;
 
 import java.net.InetSocketAddress;
 
-public class FailureDetectionPacket<NodeIDType> extends MRRequestPacket {
+public class FailureDetectionPacket<NodeIDType> extends CCRequestPacket {
 
     private static enum Keys {
         SNDR, RCVR, MODE, SADDR
@@ -33,7 +32,7 @@ public class FailureDetectionPacket<NodeIDType> extends MRRequestPacket {
 
     public FailureDetectionPacket(NodeIDType senderNodeID,
                                   NodeIDType responderNodeID, boolean status) {
-        super(0, MRPacketType.FAILURE_DETECT, null);
+        super(0, CCPacketType.FAILURE_DETECT, null);
         this.senderNodeID = senderNodeID;
         this.responderNodeID = responderNodeID;
         this.status = status;
@@ -59,7 +58,7 @@ public class FailureDetectionPacket<NodeIDType> extends MRRequestPacket {
         json.putOpt(FailureDetectionPacket.Keys.SADDR.toString(), this.saddr);
         json.put("type", this.getPacketType().getInt());
         json.put("requestID", this.getRequestID());
-        json.put("serviceName", MRManager.getDefaultServiceName());
+        json.put("serviceName", CCManager.getDefaultServiceName());
         return json;
     }
 
