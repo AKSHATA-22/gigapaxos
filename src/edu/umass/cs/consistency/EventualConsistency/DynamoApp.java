@@ -26,12 +26,7 @@ public class DynamoApp implements Reconcilable {
         try {
             return new DynamoRequestPacket(new JSONObject(stringified));
         } catch (JSONException je) {
-            try {
-                return new StatusReportPacket(new JSONObject(stringified));
-            } catch (JSONException e) {
-                log.log(Level.WARNING, "Unable to parse request " + stringified+" as a valid Dynamo request");
-                throw new RequestParseException(e);
-            }
+            throw new RequestParseException(je);
         }
     }
     @Override
@@ -94,11 +89,6 @@ public class DynamoApp implements Reconcilable {
 
     @Override
     public boolean execute(Request request, boolean doNotReplyToClient) {
-//        System.out.println("In other execute");
-        if (request instanceof StatusReportPacket) {
-            log.log(Level.INFO, "Status Report received");
-            return true;
-        }
         return this.execute(request);
     }
 

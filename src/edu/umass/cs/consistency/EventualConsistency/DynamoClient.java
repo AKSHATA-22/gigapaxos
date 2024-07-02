@@ -111,49 +111,5 @@ public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPack
         }
 
 
-
-//        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-//        Runnable task = () -> {
-////            DynamoRequestPacket request = Math.random() < 0.5 ? makePutRequest(dynamoClient) : makeGetRequest(dynamoClient);
-//            DynamoRequestPacket request = makePutRequest(dynamoClient);
-//            long reqInitime = System.currentTimeMillis();
-//            try {
-//                dynamoClient.sendRequest(request,
-//                        new InetSocketAddress("localhost", dynamoClient.ports[(int) (Math.random() * (dynamoClient.ports.length))]),
-//                        new Callback<Request, DynamoRequestPacket>() {
-//
-//                            long createTime = System.currentTimeMillis();
-//
-//                            @Override
-//                            public DynamoRequestPacket processResponse(Request response) {
-//                                assert (response instanceof QuorumRequestPacket) : response.getSummary();
-//                                System.out.println("Response for request ["
-//                                        + request.getSummary()
-//                                        + " "
-//                                        + request.getRequestValue()
-//                                        + "] = "
-//                                        + ((DynamoRequestPacket) response).getResponsePacket()
-//                                        + " "
-//                                        + ((DynamoRequestPacket) response).getTimestamp()
-//                                        + " sent at "
-//                                        + (createTime)
-//                                        + "ms");
-//                                dynamoClient.responseCounter.incrementAndGet();
-//                                return (DynamoRequestPacket) response;
-//                            }
-//                        });
-//            } catch (IOException e) {
-//                System.out.println("Request ID: "+request.getRequestID());
-//                throw new RuntimeException(e);
-//            }
-//        };
-//
-//        scheduler.scheduleAtFixedRate(task, 0, 1, TimeUnit.MICROSECONDS);
-//
-//        // Schedule task to print response rate every second
-//        scheduler.scheduleAtFixedRate(() -> {
-//            int responses = dynamoClient.responseCounter.getAndSet(0);
-//            System.out.println("Responses per second: " + responses);
-//        }, 1, 1, TimeUnit.SECONDS);
     }
 }
