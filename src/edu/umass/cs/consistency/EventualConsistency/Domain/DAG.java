@@ -24,7 +24,8 @@ public class DAG {
                 addNode(latestNodes, current);
             }
             for(GraphNode childNode: current.getChildren()){
-                graphNodeStack.push(childNode);
+                if(childNode != null)
+                    graphNodeStack.push(childNode);
             }
         }
         return latestNodes;
@@ -33,7 +34,6 @@ public class DAG {
         GraphNode dominantChildNode = new GraphNode();
         if(dynamoRequestPacket != null){
             dominantChildNode.setObjectKey(dynamoRequestPacket.getRequestValue());
-            dominantChildNode.addRequest(dynamoRequestPacket);
         }
         HashMap<Integer, Integer> vectorClock = new HashMap<>();
         for(GraphNode graphNode: graphNodesList){
@@ -59,23 +59,28 @@ public class DAG {
             graphNode.addChildNode(childNode);
         }
     }
-    public ArrayList<GraphNode> latestNodesWithVectorClockAsDominant(GraphNode receivedGraphNode){
+
+    public ArrayList<GraphNode> latestNodesWithVectorClockAsDominant(GraphNode receivedGraphNode, boolean isPut){
         ArrayList<GraphNode> latestNodes = new ArrayList<>();
         Stack<GraphNode> graphNodeStack = new Stack<>();
         latestNodes.add(rootNode);
         graphNodeStack.push(rootNode);
         while (!graphNodeStack.isEmpty()){
             GraphNode current = graphNodeStack.pop();
+            if(current.isDominant(receivedGraphNode) && isPut){
+                return null;
+            }
             if((current.getObjectKey() == null) || (current.getObjectKey().equals(receivedGraphNode.getObjectKey()) && receivedGraphNode.isDominant(current))){
                 addNode(latestNodes, current);
             }
             for(GraphNode childNode: current.getChildren()){
-                graphNodeStack.push(childNode);
+                if(childNode != null)
+                    graphNodeStack.push(childNode);
             }
         }
-
         return latestNodes;
     }
+
     private void addNode(ArrayList<GraphNode> latestNodes, GraphNode toBeCompared){
         for (int i = 0; i < latestNodes.size(); i++){
             if(toBeCompared.isDominant(latestNodes.get(i))){
@@ -96,10 +101,45 @@ public class DAG {
                 }
             }
             for(GraphNode childNode: current.getChildren()){
-                graphNodeStack.push(childNode);
+                if(childNode != null)
+                    graphNodeStack.push(childNode);
             }
         }
         return mapOfRequests;
+    }
+    public HashMap<Long, String> getAllRequestsWithVectorClockAsDominant(GraphNode graphNode){
+        HashMap<Long, String> mapOfRequests = new HashMap<>();
+        Stack<GraphNode> graphNodeStack = new Stack<>();
+        graphNodeStack.push(rootNode);
+        while (!graphNodeStack.isEmpty()){
+            GraphNode current = graphNodeStack.pop();
+            if(!current.getRequests().isEmpty() && current.getObjectKey().equals(graphNode.getObjectKey()) && graphNode.isDominant(current)){
+                for(RequestInformation requestInformation: current.getRequests()){
+                    mapOfRequests.put(requestInformation.getRequestID(), requestInformation.getRequestQuery());
+                }
+            }
+            for(GraphNode childNode: current.getChildren()){
+                if(childNode != null)
+                    graphNodeStack.push(childNode);
+            }
+        }
+        return mapOfRequests;
+    }
+    public ArrayList<HashMap<Integer, Integer>> getAllVC(String objectKey){
+        ArrayList<HashMap<Integer, Integer>> allVC = new ArrayList<>();
+        Stack<GraphNode> graphNodeStack = new Stack<>();
+        graphNodeStack.push(rootNode);
+        while (!graphNodeStack.isEmpty()){
+            GraphNode current = graphNodeStack.pop();
+            if(!current.getRequests().isEmpty() && current.getObjectKey().equals(objectKey)){
+                allVC.add(current.getVectorClock());
+            }
+            for(GraphNode childNode: current.getChildren()){
+                if(childNode != null)
+                    graphNodeStack.push(childNode);
+            }
+        }
+        return allVC;
     }
 
     public GraphNode getRootNode() {

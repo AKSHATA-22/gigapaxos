@@ -41,8 +41,19 @@ public class GraphNode {
     public void setRequests(ArrayList<RequestInformation> requests) {
         this.requests = requests;
     }
+    public void addRequests(DynamoRequestPacket dynamoRequestPacket){
+        requests.add(new RequestInformation(dynamoRequestPacket.getRequestID(), dynamoRequestPacket.getType().getLabel() + " " + dynamoRequestPacket.getRequestValue()));
+        if (!dynamoRequestPacket.getAllRequests().isEmpty()) {
+            addAllRequests(dynamoRequestPacket.getAllRequests());
+        }
+    }
     public void addRequest(DynamoRequestPacket dynamoRequestPacket){
-        requests.add(new RequestInformation(dynamoRequestPacket.getRequestID(), dynamoRequestPacket.getType().getLabel()+" "+dynamoRequestPacket.getRequestValue()));
+        requests.add(new RequestInformation(dynamoRequestPacket.getRequestID(), dynamoRequestPacket.getType().getLabel() + " " + dynamoRequestPacket.getRequestValue()));
+    }
+    private void addAllRequests(HashMap<Long, String> allRequests){
+        for(Long reqId: allRequests.keySet()){
+            requests.add(new RequestInformation(reqId, allRequests.get(reqId)));
+        }
     }
 
     public String getObjectKey() {

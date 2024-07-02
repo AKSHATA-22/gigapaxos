@@ -4,7 +4,6 @@ import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
 import edu.umass.cs.consistency.EventualConsistency.Domain.DAG;
 import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import edu.umass.cs.consistency.EventualConsistency.Domain.RequestInformation;
-import edu.umass.cs.consistency.Quorum.QuorumRequestPacket;
 import edu.umass.cs.consistency.Quorum.ReplicatedQuorumStateMachine;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
@@ -23,7 +22,6 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Set;
-import java.util.concurrent.*;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -176,25 +174,44 @@ public class DynamoManager<NodeIDType> {
                 // write_quorum_node -> node
                 handleAck(qp, rqsm);
                 break;
+            case TEST_GET_VC:
+                handleTestGetVC(qp, rqsm, callback);
+                break;
+            case TEST_GET_REQ:
+                handleTestGetReq(qp, rqsm, callback);
+                break;
             default:
                 break;
         }
     }
 
+    private void handleTestGetReq(DynamoRequestPacket qp,
+                                 ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback){
+        System.out.println("TEST GET request for : "+qp.getRequestValue()+" vc "+qp.getTestRequestVectorClock());
+        this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
+        qp.setAllRequests(this.requestDAG.get(rqsm.getQuorumID()).getAllRequestsWithVectorClockAsDominant(new GraphNode(qp.getRequestValue(), qp.getTestRequestVectorClock())));
+        sendResponse(qp.getRequestID());
+    }
+    private void handleTestGetVC(DynamoRequestPacket qp,
+                                 ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback){
+        System.out.println("TEST request for : "+qp.getRequestValue());
+        this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
+        qp.setTestResponse(this.requestDAG.get(rqsm.getQuorumID()).getAllVC(qp.getRequestValue()));
+        sendResponse(qp.getRequestID());
+    }
+
     private void handlePutRequest(DynamoRequestPacket qp,
                                   ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback) {
-        log.log(Level.INFO, "Received put request for "+qp.getRequestValue());
-        System.out.println(myID+" Received put request for "+qp.getRequestValue());
         this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
-        System.out.println("Root children: "+this.requestDAG.get(rqsm.getQuorumID()).getRootNode().getChildren().size());
         GraphNode requestGraphNode = createDominantChildGraphNode(this.requestDAG.get(rqsm.getQuorumID()).latestNodesForGivenObject(qp.getRequestValue()), qp);
-        System.out.println("Root children: "+this.requestDAG.get(rqsm.getQuorumID()).getRootNode().getChildren().size());
-        System.out.println("for key "+qp.getRequestValue()+" dominant vc : "+requestGraphNode.getVectorClock()+" request array size: "+requestGraphNode.getRequests().size());
+        HashMap<Long, String> allRequests = this.requestDAG.get(rqsm.getQuorumID()).getAllRequests(qp.getRequestValue());
         requestGraphNode.getVectorClock().put(myID, requestGraphNode.getVectorClock().get(myID)+1);
         Request request = getInterfaceRequest(this.myApp, qp.toString());
         this.myApp.execute(request, false);
-        qp.setRequestVectorClock(requestGraphNode.getVectorClock());
+        qp.setTestRequestVectorClock(requestGraphNode.getVectorClock());
         qp.setPacketType(DynamoRequestPacket.DynamoPacketType.PUT_FWD);
+        qp.setAllRequests(allRequests);
+        requestGraphNode.addRequest(qp);
         for (int i = 0; i < rqsm.getQuorumMembers().size(); i++) {
             if (rqsm.getQuorumMembers().get(i) != this.myID) {
                 qp.setSource(this.myID);
@@ -205,29 +222,32 @@ public class DynamoManager<NodeIDType> {
     }
 
     public void handlePutForward(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm) {
-        log.log(Level.INFO, "Received put forward request with vc: "+qp.getRequestVectorClock());
-        System.out.println(myID+" Received put forward request with vc: "+qp.getRequestVectorClock());
-        GraphNode graphNode = new GraphNode(qp.getRequestValue(), qp.getRequestVectorClock());
-        graphNode.addRequest(qp);
-        addChildNode(this.requestDAG.get(rqsm.getQuorumID()).latestNodesWithVectorClockAsDominant(graphNode), graphNode);
-        Request request = getInterfaceRequest(this.myApp, qp.toString());
-        this.myApp.execute(request, false);
-        this.lastWriteTS = new Timestamp(System.currentTimeMillis());
-        qp.setPacketType(DynamoRequestPacket.DynamoPacketType.PUT_ACK);
-        int dest = qp.getDestination();
-        qp.setDestination(qp.getSource());
-        qp.setSource(dest);
-        qp.setResponsePacket(new DynamoRequestPacket.DynamoPacket(qp.getRequestVectorClock(), "-1"));
-        this.sendRequest(qp, qp.getDestination());
+        GraphNode graphNode = new GraphNode(qp.getRequestValue(), qp.getTestRequestVectorClock());
+        ArrayList<GraphNode> latestNodes = this.requestDAG.get(rqsm.getQuorumID()).latestNodesWithVectorClockAsDominant(graphNode, true);
+        if(latestNodes != null){
+            addChildNode(latestNodes, graphNode);
+            HashMap<Long, String> executedRequests = this.requestDAG.get(rqsm.getQuorumID()).getAllRequests(qp.getRequestValue());
+            qp.getAllRequests().keySet().removeAll(executedRequests.keySet());
+            graphNode.setRequests(executeRequests(qp.getAllRequests(), qp));
+            graphNode.addRequests(qp);
+            Request request = getInterfaceRequest(this.myApp, qp.toString());
+            this.myApp.execute(request, false);
+            this.lastWriteTS = new Timestamp(System.currentTimeMillis());
+            qp.setPacketType(DynamoRequestPacket.DynamoPacketType.PUT_ACK);
+            int dest = qp.getDestination();
+            qp.setDestination(qp.getSource());
+            qp.setSource(dest);
+            qp.setResponsePacket(new DynamoRequestPacket.DynamoPacket(qp.getTestRequestVectorClock(), "-1"));
+            this.sendRequest(qp, qp.getDestination());
+        }
     }
 
     private void handleGetRequest(DynamoRequestPacket qp,
                                   ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback) {
         System.out.println("GET request for "+qp.getRequestValue()+" received by "+myID);
         this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
-        qp.setRequestVectorClock(qp.getRequestVectorClock());
+        qp.setTestRequestVectorClock(qp.getTestRequestVectorClock());
         qp.setPacketType(DynamoRequestPacket.DynamoPacketType.GET_FWD);
-//        Send request to all the quorum members
         for (int i = 0; i < rqsm.getQuorumMembers().size(); i++) {
             qp.setSource(this.myID);
             qp.setDestination(rqsm.getQuorumMembers().get(i));
@@ -236,10 +256,7 @@ public class DynamoManager<NodeIDType> {
     }
 
     public void handleGetForward(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm) {
-//        return the value from underlying app and the version from version hashmap
-        System.out.println("Get fwd request for: "+qp.getRequestValue()+" node: "+myID+" ======================>");
         HashMap<Long, String> allRequests = this.requestDAG.get(rqsm.getQuorumID()).getAllRequests(qp.getRequestValue());
-        System.out.println("All requests: "+allRequests);
         GraphNode requestGraphNode = createDominantChildGraphNode(this.requestDAG.get(rqsm.getQuorumID()).latestNodesForGivenObject(qp.getRequestValue()), qp);
         requestGraphNode.getVectorClock().put(myID, requestGraphNode.getVectorClock().get(myID)+1);
         System.out.println(requestGraphNode);
@@ -257,11 +274,10 @@ public class DynamoManager<NodeIDType> {
     }
 
     public void handleAck(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm) {
-//        append in the hashmap and check the total
         if (qp.getType() == DynamoRequestPacket.DynamoPacketType.PUT_ACK) {
             try {
                 if (this.requestsReceived.get(qp.getRequestID()).incrementAck(qp, rqsm) == rqsm.getWriteQuorum() - 1) {
-                    this.requestsReceived.get(qp.getRequestID()).setResponse(qp.getRequestVectorClock(), qp.getResponsePacket().getValue(), qp.getTimestamp());
+                    this.requestsReceived.get(qp.getRequestID()).setResponse(qp.getTestRequestVectorClock(), qp.getResponsePacket().getValue(), qp.getTimestamp());
                     sendResponse(qp.getRequestID());
                 }
             } catch (Exception e) {
@@ -273,12 +289,10 @@ public class DynamoManager<NodeIDType> {
                     ArrayList<GraphNode> responseGraphNodes = new ArrayList<>(this.requestsReceived.get(qp.getRequestID()).getResponseGraphNodes());
                     GraphNode reconciledResponse = this.myApp.reconcile(responseGraphNodes);
                     HashMap<Long, String> executedRequests = this.requestDAG.get(rqsm.getQuorumID()).getAllRequests(qp.getRequestValue());
-                    System.out.println("Executed Requests: "+executedRequests);
                     HashMap<Long, String> obtainedRequests = this.requestsReceived.get(qp.getRequestID()).getResponseRequests();
-                    System.out.println("Obtained Requests: "+obtainedRequests);
                     obtainedRequests.keySet().removeAll(executedRequests.keySet());
                     reconciledResponse.setRequests(executeRequests(obtainedRequests, qp));
-                    addChildNode(this.requestDAG.get(rqsm.getQuorumID()).latestNodesWithVectorClockAsDominant(reconciledResponse), reconciledResponse);
+                    addChildNode(this.requestDAG.get(rqsm.getQuorumID()).latestNodesWithVectorClockAsDominant(reconciledResponse, false), reconciledResponse);
                     Request request = getInterfaceRequest(this.myApp, qp.toString());
                     this.myApp.execute(request, false);
                     this.requestsReceived.get(qp.getRequestID()).setResponse(reconciledResponse.getVectorClock(), qp.getResponsePacket().getValue(), qp.getTimestamp());
@@ -296,7 +310,6 @@ public class DynamoManager<NodeIDType> {
             String[] strings = hashMap.get(key).split(" ");
             dummyRequestPacket.setPacketType(DynamoRequestPacket.DynamoPacketType.getDynamoPacketType(strings[0]));
             dummyRequestPacket.setRequestValue(strings[1]);
-            System.out.println("Executing missing request: "+key+" value: "+hashMap.get(key));
             Request request = getInterfaceRequest(this.myApp, dummyRequestPacket.toString());
             this.myApp.execute(request, false);
             requestInformationArrayList.add(new RequestInformation(key, hashMap.get(key)));
@@ -312,7 +325,6 @@ public class DynamoManager<NodeIDType> {
             this.requestsReceived.remove(requestID);
 
         } else {
-            // can't find the request being queued in outstanding
             log.log(Level.WARNING, "QuorumManager.handleResponse received " +
                             "an ACK request {0} that does not match any enqueued request.",
                     new Object[]{requestID});
@@ -331,19 +343,6 @@ public class DynamoManager<NodeIDType> {
             e.printStackTrace();
         }
     }
-
-    private void sendStatusReport(StatusReportPacket qp) {
-        GenericMessagingTask<NodeIDType, ?> gTask = null;
-        try {
-            // forward to nodeID
-            gTask = new GenericMessagingTask(this.integerMap.get(qp.getDestination()),
-                    qp);
-            this.messenger.send(gTask);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
 
     private static Request getInterfaceRequest(Replicable app, String value) {
         try {
