@@ -22,7 +22,6 @@ public class DynamoApp implements Reconcilable {
     private Logger log = Logger.getLogger(DynamoApp.class.getName());
     @Override
     public Request getRequest(String stringified) throws RequestParseException {
-//        System.out.println("In get request of app");
         try {
             return new DynamoRequestPacket(new JSONObject(stringified));
         } catch (JSONException je) {

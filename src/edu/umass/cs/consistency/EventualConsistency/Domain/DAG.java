@@ -118,7 +118,7 @@ public class DAG {
         return mapOfRequests;
     }
 
-    public GraphNode pruneRequests(HashMap<Integer, Integer> vectorClock){
+    public void pruneRequests(HashMap<Integer, Integer> vectorClock){
         ArrayList<GraphNode> nodes = new ArrayList<>();
         ArrayList<HashMap<Integer, Integer>> visited = new ArrayList<>();
         Stack<GraphNode> graphNodeStack = new Stack<>();
@@ -139,7 +139,6 @@ public class DAG {
         for(GraphNode node: nodes){
             rootNode.addChildNode(node);
         }
-        return rootNode;
     }
     public HashMap<Long, String> getAllRequestsWithVectorClockAsDominant(GraphNode graphNode){
         HashMap<Long, String> mapOfRequests = new HashMap<>();

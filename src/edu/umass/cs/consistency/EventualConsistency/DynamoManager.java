@@ -22,6 +22,9 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.*;
 
 import static edu.umass.cs.consistency.EventualConsistency.Domain.DAG.addChildNode;
@@ -44,6 +47,8 @@ public class DynamoManager<NodeIDType> {
     public static final Logger log = Logger.getLogger(DynamoManager.class.getName());
 
     public static final Class<?> application = DynamoApp.class;
+    private ScheduledExecutorService scheduler;
+
 
     public static final String getDefaultServiceName() {
         return application.getSimpleName() + "0";
@@ -72,6 +77,22 @@ public class DynamoManager<NodeIDType> {
         fileHandler.setFormatter(new SimpleFormatter());
         log.addHandler(fileHandler);
         log.setLevel(Level.FINE);
+        initializePruningScheduler();
+    }
+
+    private void initializePruningScheduler(){
+        scheduler = Executors.newScheduledThreadPool(1);
+        Runnable prune = new Runnable() {
+            public synchronized void run() {
+                for (String quorumID: replicatedQuorums.keySet()){
+                    log.log(Level.INFO, "Pruning for quorumID {0}", new Object[]{quorumID});
+                    log.info("Before pruning "+requestDAG.get(quorumID).getAllVC());
+                    requestDAG.get(quorumID).pruneRequests(replicatedQuorums.get(quorumID).getMinorVectorClock());
+                    log.info("After pruning "+requestDAG.get(quorumID).getAllVC());
+                }
+            }
+        };
+        scheduler.scheduleAtFixedRate(prune, 1, 10, TimeUnit.MINUTES);
     }
 
     public static class DynamoRequestAndCallback {
@@ -203,16 +224,16 @@ public class DynamoManager<NodeIDType> {
         log.info("PUT request for : "+qp.getRequestValue()+" vc "+qp.getRequestVectorClock()+" id "+myID);
         log.info("Before PUT "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
         this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
+        Request request = getInterfaceRequest(this.myApp, qp.toString());
+        this.myApp.execute(request, false);
         GraphNode requestGraphNode = createDominantChildGraphNode(this.requestDAG.get(rqsm.getQuorumID()).getLatestNodes(), rqsm.getInitialVectorClock());
         requestGraphNode.getVectorClock().put(myID, requestGraphNode.getVectorClock().get(myID)+1);
         HashMap<Long, String> allRequests = this.requestDAG.get(rqsm.getQuorumID()).getAllRequests(requestGraphNode.getVectorClock());
         rqsm.updateMemberVectorClock(myID, requestGraphNode.getVectorClock());
-        Request request = getInterfaceRequest(this.myApp, qp.toString());
-        this.myApp.execute(request, false);
+        requestGraphNode.addRequest(qp);
         qp.setRequestVectorClock(requestGraphNode.getVectorClock());
         qp.setPacketType(DynamoRequestPacket.DynamoPacketType.PUT_FWD);
         qp.setAllRequests(allRequests);
-        requestGraphNode.addRequest(qp);
         log.info("After PUT "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
         for (int i = 0; i < rqsm.getQuorumMembers().size(); i++) {
             if (rqsm.getQuorumMembers().get(i) != this.myID) {
@@ -228,10 +249,9 @@ public class DynamoManager<NodeIDType> {
         log.info("Bef PUT_FWD "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
         GraphNode graphNode = new GraphNode(qp.getRequestVectorClock());
         ArrayList<GraphNode> latestNodes = this.requestDAG.get(rqsm.getQuorumID()).latestNodesWithVectorClockAsDominant(graphNode, true);
-        log.log(Level.INFO, "Latest Nodes returned: {0}", new Object[]{latestNodes});
         rqsm.updateMemberVectorClock(qp.getSource(), qp.getRequestVectorClock());
+        log.log(Level.INFO, "Latest Nodes returned: {0}", new Object[]{latestNodes});
         if(latestNodes != null){
-            addChildNode(latestNodes, graphNode);
             HashMap<Long, String> executedRequests = this.requestDAG.get(rqsm.getQuorumID()).getAllRequests(graphNode.getVectorClock());
             log.info(myID+" executed: "+executedRequests+" received "+qp.getAllRequests());
             qp.getAllRequests().keySet().removeAll(executedRequests.keySet());
@@ -240,6 +260,8 @@ public class DynamoManager<NodeIDType> {
             log.info("After PUT_FWD "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
             Request request = getInterfaceRequest(this.myApp, qp.toString());
             this.myApp.execute(request, false);
+            addChildNode(latestNodes, graphNode);
+            rqsm.updateMemberVectorClock(myID, qp.getRequestVectorClock());
             qp.setPacketType(DynamoRequestPacket.DynamoPacketType.PUT_ACK);
             int dest = qp.getDestination();
             qp.setDestination(qp.getSource());
@@ -276,13 +298,13 @@ public class DynamoManager<NodeIDType> {
     public synchronized void handleGetForward(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm) {
         log.info("GET_FWD request for : "+qp.getRequestValue()+" vc "+qp.getRequestVectorClock()+" id "+myID);
         log.info("Before GET_FWD "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
+        Request request = getInterfaceRequest(this.myApp, qp.toString());
+        this.myApp.execute(request, false);
         GraphNode requestGraphNode = createDominantChildGraphNode(this.requestDAG.get(rqsm.getQuorumID()).getLatestNodes(), rqsm.getInitialVectorClock());
         requestGraphNode.getVectorClock().put(myID, requestGraphNode.getVectorClock().get(myID)+1);
         rqsm.updateMemberVectorClock(myID, requestGraphNode.getVectorClock());
         HashMap<Long, String> allRequests = this.requestDAG.get(rqsm.getQuorumID()).getAllRequests(requestGraphNode.getVectorClock());
         requestGraphNode.addRequest(qp);
-        Request request = getInterfaceRequest(this.myApp, qp.toString());
-        this.myApp.execute(request, false);
         assert request != null;
         log.info("After GET_FWD "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
         qp.setResponsePacket(new DynamoRequestPacket.DynamoPacket(requestGraphNode.getVectorClock(), ((DynamoRequestPacket) request).getResponsePacket().getValue()));

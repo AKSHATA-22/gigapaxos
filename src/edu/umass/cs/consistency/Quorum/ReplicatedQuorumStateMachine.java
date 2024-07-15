@@ -119,8 +119,22 @@ public class ReplicatedQuorumStateMachine {
         else if(!isMinor){
             memberVectorClocks.put(member, minVectorClock);
         }
-        DynamoManager.log.log(Level.INFO, "Updating member Vector Clock for {0} to updated {2}",
+        DynamoManager.log.log(Level.INFO, "Updating member Vector Clock for {0} to updated {1}",
                 new Object[]{member, memberVectorClocks.get(member)});
+    }
+
+    public HashMap<Integer, Integer> getMinorVectorClock(){
+        HashMap<Integer, Integer> minorVC = new HashMap<>();
+        for (int member: memberVectorClocks.keySet()){
+            if(minorVC.isEmpty()){
+                minorVC = memberVectorClocks.get(member);
+                continue;
+            }
+            for (int node: minorVC.keySet()){
+                minorVC.put(node, Math.min(minorVC.get(node), memberVectorClocks.get(member).get(node)));
+            }
+        }
+        return minorVC;
     }
 
     public void setMemberVectorClocks(HashMap<Integer, HashMap<Integer, Integer>> memberVectorClocks) {
