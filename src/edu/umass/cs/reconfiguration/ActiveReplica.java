@@ -1049,19 +1049,15 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 //		This is temporary fix
 
 		else if (request instanceof QuorumRequestPacket) {
-//			System.out.println("it is a quorum packet");
 			return request;
 		}
 		else if (request instanceof DynamoRequestPacket) {
-//			System.out.println("it is a dynamo packet");
 			return request;
 		}
 		else if (request instanceof FailureDetectionPacket<?>) {
-//			System.out.println("it is a dynamo packet");
 			return request;
 		}
 		else if (request instanceof CCRequestPacket) {
-//			System.out.println("it is a dynamo packet");
 			return request;
 		}
 

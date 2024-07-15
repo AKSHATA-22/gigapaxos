@@ -135,7 +135,7 @@ public class DynamoApp implements Reconcilable {
             return null;
         }
         try {
-            return DAG.createDominantChildGraphNode(requests, null);
+            return DAG.getDominantVC(requests);
         } catch (Exception e) {
             log.log(Level.WARNING, "Error in reconciling the requests: " + e.toString());
         }

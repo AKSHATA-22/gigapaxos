@@ -75,9 +75,7 @@ public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPack
         for (int i = 0; i < 1; i++) {
             DynamoRequestPacket request = makeGetRequest(dynamoClient);
             long reqInitime = System.currentTimeMillis();
-//            System.out.println("Sending request vc:"+request.getRequestVectorClock());
             int port = dynamoClient.ports[(int) (Math.random() * (dynamoClient.ports.length))];
-//            int port = dynamoClient.ports[0];
             System.out.println("Sending to port: "+port);
             dynamoClient.sendRequest(request,
                     new InetSocketAddress("localhost", port),
@@ -94,8 +92,6 @@ public class DynamoClient extends ReconfigurableAppClientAsync<DynamoRequestPack
                                     + request.getRequestValue()
                                     + "] = "
                                     + ((DynamoRequestPacket) response).getResponsePacket()
-                                    + " "
-                                    + ((DynamoRequestPacket) response).getTimestamp()
                                     + " sent at "
                                     + (createTime)
                                     + "ms");

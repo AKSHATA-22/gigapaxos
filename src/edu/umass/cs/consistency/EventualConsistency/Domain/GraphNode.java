@@ -9,14 +9,12 @@ public class GraphNode {
     private ArrayList<RequestInformation> requests;
     private HashMap<Integer, Integer> vectorClock;
     private ArrayList<GraphNode> children;
-    private String objectKey;
     public GraphNode() {
         vectorClock = new HashMap<>();
         children =  new ArrayList<GraphNode>();
         requests = new ArrayList<>();
     }
-    public GraphNode(String objectKey, HashMap<Integer, Integer> vectorClock) {
-        this.objectKey = objectKey;
+    public GraphNode(HashMap<Integer, Integer> vectorClock) {
         this.vectorClock = vectorClock;
         children =  new ArrayList<GraphNode>();
         requests = new ArrayList<>();
@@ -56,20 +54,31 @@ public class GraphNode {
         }
     }
 
-    public String getObjectKey() {
-        return objectKey;
-    }
-
-    public void setObjectKey(String objectKey) {
-        this.objectKey = objectKey;
-    }
-
     public ArrayList<GraphNode> getChildren() {
         return children;
     }
     public boolean isDominant(GraphNode graphNode){
         for (int key : this.getVectorClock().keySet()) {
             if(this.getVectorClock().get(key) < graphNode.getVectorClock().get(key)){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public boolean isDominant(HashMap <Integer, Integer> vectorClock){
+        for (int key : this.getVectorClock().keySet()) {
+            if(this.getVectorClock().get(key) < vectorClock.get(key)){
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public boolean isMinor(HashMap <Integer, Integer> vectorClock){
+        System.out.println(this.getVectorClock()+" "+vectorClock);
+        for (int key : this.getVectorClock().keySet()) {
+            if(this.getVectorClock().get(key) >= vectorClock.get(key)){
                 return false;
             }
         }

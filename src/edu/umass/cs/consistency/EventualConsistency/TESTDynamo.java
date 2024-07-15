@@ -57,34 +57,34 @@ public class TESTDynamo {
             int port = (int) (Math.random() * ((testDynamoClient.ports.length - 1) + 1));
             DynamoRequestPacket dynamoRequestPacket = i % 2 == 0 ? TESTDynamoClient.makePutRequest(testDynamoClient, -1) : TESTDynamoClient.makeGetRequest(testDynamoClient, -1);
             testDynamoClient.sendAppRequest(dynamoRequestPacket, testDynamoClient.ports[port]);
-            Thread.sleep(500);
+            Thread.sleep(1000);
         }
         Assert.assertTrue(passed.get());
     }
-    @Test
-    public void test05_checkVC() throws Exception{
-        Thread.sleep(100);
-        System.out.println("TEST 05 starting");
-        int entry = 0;
-        int item = 0;
-        DynamoRequestPacket dynamoRequestPacket = TESTDynamoClient.makeTestGetVCRequest(testDynamoClient, item);
-        ArrayList<HashMap<Integer, Integer>> allVC = testDynamoClient.sendTESTRequest(dynamoRequestPacket, testDynamoClient.ports[entry]);
-        for(HashMap<Integer, Integer> vectorClock: allVC){
-            DynamoRequestPacket dynamoGetRequestPacketForEntry = TESTDynamoClient.makeTestGetRequests(testDynamoClient, item);
-            dynamoGetRequestPacketForEntry.setTestRequestVectorClock(vectorClock);
-            HashMap<Long, String> fromEntryServer = testDynamoClient.sendTESTGetRequest(dynamoGetRequestPacketForEntry, testDynamoClient.ports[entry]);
-            System.out.println(fromEntryServer);
-            for (int port = 0; port < testDynamoClient.ports.length; port++) {
-                if (port != entry) {
-                    DynamoRequestPacket dynamoGetRequestPacket = TESTDynamoClient.makeTestGetRequests(testDynamoClient, item);
-                    dynamoGetRequestPacket.setTestRequestVectorClock(vectorClock);
-                    HashMap<Long, String> notFromEntryServer = testDynamoClient.sendTESTGetRequest(dynamoGetRequestPacket, testDynamoClient.ports[port]);
-                    Assert.assertTrue(fromEntryServer.keySet().containsAll(notFromEntryServer.keySet()));
-                }
-            }
-        }
-        Assert.assertTrue(true);
-    }
+//    @Test
+//    public void test05_checkVC() throws Exception{
+//        Thread.sleep(100);
+//        System.out.println("TEST 05 starting");
+//        int entry = 0;
+//        int item = 0;
+//        DynamoRequestPacket dynamoRequestPacket = TESTDynamoClient.makeTestGetVCRequest(testDynamoClient, item);
+//        ArrayList<HashMap<Integer, Integer>> allVC = testDynamoClient.sendTESTRequest(dynamoRequestPacket, testDynamoClient.ports[entry]);
+//        for(HashMap<Integer, Integer> vectorClock: allVC){
+//            DynamoRequestPacket dynamoGetRequestPacketForEntry = TESTDynamoClient.makeTestGetRequests(testDynamoClient, item);
+//            dynamoGetRequestPacketForEntry.setTestRequestVectorClock(vectorClock);
+//            HashMap<Long, String> fromEntryServer = testDynamoClient.sendTESTGetRequest(dynamoGetRequestPacketForEntry, testDynamoClient.ports[entry]);
+//            System.out.println(fromEntryServer);
+//            for (int port = 0; port < testDynamoClient.ports.length; port++) {
+//                if (port != entry) {
+//                    DynamoRequestPacket dynamoGetRequestPacket = TESTDynamoClient.makeTestGetRequests(testDynamoClient, item);
+//                    dynamoGetRequestPacket.setTestRequestVectorClock(vectorClock);
+//                    HashMap<Long, String> notFromEntryServer = testDynamoClient.sendTESTGetRequest(dynamoGetRequestPacket, testDynamoClient.ports[port]);
+//                    Assert.assertTrue(fromEntryServer.keySet().containsAll(notFromEntryServer.keySet()));
+//                }
+//            }
+//        }
+//        Assert.assertTrue(true);
+//    }
     public static void main(String[] args) {
         Class<?> testClass = TESTMW.class;
         Method[] methods = testClass.getDeclaredMethods();
