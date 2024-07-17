@@ -18,10 +18,12 @@ public class MRClient extends ReconfigurableAppClientAsync<CCRequestPacket> {
     private String[] items = new String[]{"CIRCLE01", "TRIANGLE01", "CIRCLE02", "TRIANGLE02", "CIRCLE03"};
     private String[] coords = new String[]{"1,1", "3,2", "4,4", "9,4", "8,5", "3,7", "6,3", "8,0"};
     private int[] ports = new int[]{2000,2001,2002};
+    private final Long clientID;
     private HashMap<Integer, ArrayList<CCManager.Write>> requestWrites = new HashMap<>();
     private HashMap<Integer, Timestamp> requestVectorClock = new HashMap<Integer, Timestamp>();
     public MRClient() throws IOException {
         super();
+        this.clientID = (long) (Math.random() * Integer.MAX_VALUE);
     }
     @Override
     public Request getRequest(String stringified) throws RequestParseException {
@@ -44,11 +46,11 @@ public class MRClient extends ReconfigurableAppClientAsync<CCRequestPacket> {
         int item = (int)(Math.random() * (mrc.items.length));
         int coord = (int)(Math.random() * (mrc.coords.length));
         String command = mrc.types[type] + " " + mrc.items[item] + " " + mrc.coords[coord];
-        return new CCRequestPacket((long)(Math.random()*Integer.MAX_VALUE), CCRequestPacket.CCPacketType.MR_WRITE, CCManager.getDefaultServiceName(),
+        return new CCRequestPacket(mrc.clientID, (long)(Math.random()*Integer.MAX_VALUE), CCRequestPacket.CCPacketType.MR_WRITE, CCManager.getDefaultServiceName(),
                 command, mrc.requestVectorClock, mrc.requestWrites);
     }
     public static CCRequestPacket makeReadRequest(MRClient mrc){
-        return new CCRequestPacket((long)(Math.random()*Integer.MAX_VALUE), CCRequestPacket.CCPacketType.MR_READ, CCManager.getDefaultServiceName(),
+        return new CCRequestPacket(mrc.clientID, (long)(Math.random()*Integer.MAX_VALUE), CCRequestPacket.CCPacketType.MR_READ, CCManager.getDefaultServiceName(),
                 "read_request", mrc.requestVectorClock, mrc.requestWrites);
     }
     public static void updateWrites(CCRequestPacket response, MRClient mrc){

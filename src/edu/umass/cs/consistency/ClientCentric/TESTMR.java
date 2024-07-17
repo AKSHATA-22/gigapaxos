@@ -34,11 +34,14 @@ public class TESTMR {
         clientThread.start();
     }
     @Test
-    public void test01_sendRequestToOneExtraServer() throws IOException{
+    public void test01_sendRequestToOneExtraServer() throws Exception{
         TESTMRClient testmrClient = new TESTMRClient();
         testmrClient.sendAppRequest(testmrClient, testmrClient.makeWriteRequest(testmrClient, CCRequestPacket.CCPacketType.MR_WRITE), 2000);
+        Thread.sleep(1000);
         testmrClient.sendAppRequest(testmrClient, testmrClient.makeWriteRequest(testmrClient, CCRequestPacket.CCPacketType.MR_WRITE), 2000);
+        Thread.sleep(300);
         testmrClient.sendAppRequest(testmrClient, testmrClient.makeReadRequest(testmrClient, CCRequestPacket.CCPacketType.MR_READ), 2001);
+        Thread.sleep(300);
         Assert.assertTrue(passed.get());
     }
     @Test

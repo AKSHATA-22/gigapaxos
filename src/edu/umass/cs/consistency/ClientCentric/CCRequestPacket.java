@@ -16,6 +16,7 @@ import java.util.Iterator;
 
 public class CCRequestPacket extends JSONPacket implements ReplicableRequest, ClientRequest {
     public final long requestID;
+    public final long clientID;
     //    Maps the versionVector hashmap to the final response string
     private String requestValue = null;
     private String serviceName = null;
@@ -31,8 +32,9 @@ public class CCRequestPacket extends JSONPacket implements ReplicableRequest, Cl
     private InetSocketAddress clientSocketAddress = null;
     private CCPacketType packetType;
 
-    public CCRequestPacket(long reqID, CCPacketType reqType, String serviceName, String value, HashMap<Integer, Timestamp> requestVectorClock, HashMap<Integer, ArrayList<CCManager.Write>> requestWrites){
+    public CCRequestPacket(long clientID, long reqID, CCPacketType reqType, String serviceName, String value, HashMap<Integer, Timestamp> requestVectorClock, HashMap<Integer, ArrayList<CCManager.Write>> requestWrites){
         super(reqType);
+        this.clientID = clientID;
         this.packetType = reqType;
         this.requestID = reqID;
         this.requestValue = value;
@@ -40,10 +42,10 @@ public class CCRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         this.requestVectorClock = requestVectorClock;
         this.serviceName = serviceName;
     }
-    public CCRequestPacket(long reqID, CCPacketType reqType,
+    public CCRequestPacket(long clientID, long reqID, CCPacketType reqType,
                            CCRequestPacket req){
         super(reqType);
-
+        this.clientID = clientID;
         this.packetType = reqType;
         this.requestID = reqID;
         if(req == null)
@@ -64,6 +66,7 @@ public class CCRequestPacket extends JSONPacket implements ReplicableRequest, Cl
     public CCRequestPacket(JSONObject jsonObject) throws JSONException{
         super(jsonObject);
         this.requestID = jsonObject.getLong("requestID");
+        this.clientID = jsonObject.getLong("clientID");
         this.setPacketType(CCPacketType.getMRPacketType(jsonObject.getInt("type")));
         this.setServiceName(jsonObject.getString("serviceName"));
         if (jsonObject.has("requestVectorClock")){
@@ -127,7 +130,11 @@ public class CCRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         FWD("FWD", 1405),
         FWD_ACK("FWD_ACK", 1406),
         FAILURE_DETECT("FAILURE_DETECT", 1407),
-        RESPONSE("RESPONSE", 1408),
+        CVC_PUT("CVC_PUT", 1408),
+        CVC_GET("CVC_GET", 1409),
+        CVC_GET_ACK("CVC_GET_ACK", 1410),
+        CVC_PUT_ACK("CVC_PUT_ACK", 1411),
+        RESPONSE("RESPONSE", 1412),
         ;
         String label;
         int number;
@@ -260,11 +267,15 @@ public class CCRequestPacket extends JSONPacket implements ReplicableRequest, Cl
         this.packetType = packetType;
     }
 
+    public long getClientID() {
+        return clientID;
+    }
+
     @Override
     public ClientRequest getResponse() {
 //        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! getResponse is called!!!!!!!!!!!!");
 
-        CCRequestPacket reply = new CCRequestPacket(this.requestID,
+        CCRequestPacket reply = new CCRequestPacket(this.clientID, this.requestID,
                 CCPacketType.RESPONSE, this);
 //        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Response value is "+response+"!!!!!!!!!!!!");
         reply.responseValue = this.responseValue;
@@ -294,6 +305,7 @@ public class CCRequestPacket extends JSONPacket implements ReplicableRequest, Cl
     protected JSONObject toJSONObjectImpl() throws JSONException {
         JSONObject jsonObject = new JSONObject();
         jsonObject.put("requestID", this.requestID);
+        jsonObject.put("clientID", this.clientID);
         jsonObject.put("requestValue", this.requestValue);
         jsonObject.put("serviceName", this.serviceName);
         jsonObject.put("responseValue", this.responseValue);

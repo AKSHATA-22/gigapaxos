@@ -35,7 +35,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import edu.umass.cs.consistency.EventualConsistency.DynamoRequestPacket;
-import edu.umass.cs.consistency.ClientCentric.FailureDetectionPacket;
 import edu.umass.cs.consistency.ClientCentric.CCRequestPacket;
 import edu.umass.cs.consistency.Quorum.QuorumRequestPacket;
 import edu.umass.cs.reconfiguration.reconfigurationpackets.*;
@@ -1052,9 +1051,6 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 			return request;
 		}
 		else if (request instanceof DynamoRequestPacket) {
-			return request;
-		}
-		else if (request instanceof FailureDetectionPacket<?>) {
 			return request;
 		}
 		else if (request instanceof CCRequestPacket) {

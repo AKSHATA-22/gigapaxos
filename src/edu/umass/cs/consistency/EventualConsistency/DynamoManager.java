@@ -4,7 +4,6 @@ import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
 import edu.umass.cs.consistency.EventualConsistency.Domain.DAG;
 import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import edu.umass.cs.consistency.EventualConsistency.Domain.RequestInformation;
-import edu.umass.cs.consistency.Quorum.ReplicatedQuorumStateMachine;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
@@ -34,7 +33,7 @@ public class DynamoManager<NodeIDType> {
     private final PaxosMessenger<NodeIDType> messenger; // messaging
     private final int myID;
     private final Reconcilable myApp;
-    private final HashMap<String, ReplicatedQuorumStateMachine> replicatedQuorums;;
+    private final HashMap<String, ReplicatedDynamoStateMachine> replicatedQuorums;;
     // maps the quorumID to DAG associated
     private HashMap<String, DAG> requestDAG = new HashMap<>();
     private final Stringifiable<NodeIDType> unstringer;
@@ -70,7 +69,7 @@ public class DynamoManager<NodeIDType> {
         this.messenger = (new PaxosMessenger<NodeIDType>(niot, this.integerMap));
         FileHandler fileHandler = null;
         try {
-            fileHandler = new FileHandler("output/manager"+myID+".log", true);
+            fileHandler = new FileHandler("output/dynamoManager"+myID+".log", true);
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
@@ -123,7 +122,7 @@ public class DynamoManager<NodeIDType> {
             dynamoRequestPacket.setResponsePacket(new DynamoRequestPacket.DynamoPacket(vectorClock, value));
         }
 
-        public Integer incrementAck(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm) {
+        public Integer incrementAck(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm) {
             this.numOfAcksReceived += 1;
             if (qp.getType() == DynamoRequestPacket.DynamoPacketType.GET_ACK) {
                 System.out.println("GET ACK received----------"+qp.getSource());
@@ -164,7 +163,7 @@ public class DynamoManager<NodeIDType> {
     }
 
     //    class
-    private void handleDynamoPacket(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback) {
+    private void handleDynamoPacket(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm, ExecutedCallback callback) {
 
         DynamoRequestPacket.DynamoPacketType packetType = qp.getType();
 
@@ -205,14 +204,14 @@ public class DynamoManager<NodeIDType> {
     }
 
     private void handleTestGetReq(DynamoRequestPacket qp,
-                                 ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback){
+                                  ReplicatedDynamoStateMachine rqsm, ExecutedCallback callback){
         log.info("TEST GET request for : "+qp.getRequestValue()+" vc "+qp.getRequestVectorClock());
         this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
         qp.setAllRequests(this.requestDAG.get(rqsm.getQuorumID()).getAllRequestsWithVectorClockAsDominant(new GraphNode(qp.getRequestVectorClock())));
         sendResponse(qp.getRequestID());
     }
     private void handleTestGetVC(DynamoRequestPacket qp,
-                                 ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback){
+                                 ReplicatedDynamoStateMachine rqsm, ExecutedCallback callback){
         log.info("TEST request for : "+qp.getRequestValue());
         this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
         qp.setTestResponse(this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
@@ -220,7 +219,7 @@ public class DynamoManager<NodeIDType> {
     }
 
     private synchronized void handlePutRequest(DynamoRequestPacket qp,
-                                  ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback) {
+                                               ReplicatedDynamoStateMachine rqsm, ExecutedCallback callback) {
         log.info("PUT request for : "+qp.getRequestValue()+" vc "+qp.getRequestVectorClock()+" id "+myID);
         log.info("Before PUT "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
         this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
@@ -244,7 +243,7 @@ public class DynamoManager<NodeIDType> {
         }
     }
 
-    public synchronized void handlePutForward(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm) {
+    public synchronized void handlePutForward(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm) {
         log.info("PUT_FWD request for : "+qp.getRequestValue()+" vc "+qp.getRequestVectorClock()+" id "+myID);
         log.info("Bef PUT_FWD "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
         GraphNode graphNode = new GraphNode(qp.getRequestVectorClock());
@@ -271,7 +270,7 @@ public class DynamoManager<NodeIDType> {
         }
     }
 
-    public void handlePutAck(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm) {
+    public void handlePutAck(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm) {
         log.log(Level.INFO, "PUT_ACK for {0} received. Sent by : {1}", new Object[]{qp.getRequestID(), qp.getSource()});
         if (this.requestsReceived.containsKey(qp.getRequestID()) && this.requestsReceived.get(qp.getRequestID()).incrementAck(qp, rqsm) == rqsm.getWriteQuorum() - 1) {
             this.requestsReceived.get(qp.getRequestID()).setResponse(qp.getRequestVectorClock(), qp.getResponsePacket().getValue());
@@ -280,7 +279,7 @@ public class DynamoManager<NodeIDType> {
     }
 
     private void handleGetRequest(DynamoRequestPacket qp,
-                                  ReplicatedQuorumStateMachine rqsm, ExecutedCallback callback) {
+                                  ReplicatedDynamoStateMachine rqsm, ExecutedCallback callback) {
         log.info("GET request for "+qp.getRequestValue()+" received by "+myID);
         log.info("GET"+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
         this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
@@ -295,7 +294,7 @@ public class DynamoManager<NodeIDType> {
         }
     }
 
-    public synchronized void handleGetForward(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm) {
+    public synchronized void handleGetForward(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm) {
         log.info("GET_FWD request for : "+qp.getRequestValue()+" vc "+qp.getRequestVectorClock()+" id "+myID);
         log.info("Before GET_FWD "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
         Request request = getInterfaceRequest(this.myApp, qp.toString());
@@ -316,7 +315,7 @@ public class DynamoManager<NodeIDType> {
         this.sendRequest(qp, qp.getDestination());
     }
 
-    public synchronized void handleGetAck(DynamoRequestPacket qp, ReplicatedQuorumStateMachine rqsm) {
+    public synchronized void handleGetAck(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm) {
         rqsm.updateMemberVectorClock(qp.getSource(), qp.getResponsePacket().getVectorClock());
         if (this.requestsReceived.containsKey(qp.getRequestID()) && this.requestsReceived.get(qp.getRequestID()).incrementAck(qp, rqsm) == rqsm.getReadQuorum() - 1) {
             log.info("Before GET_ACK from "+ qp.getSource() +" VC "+this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
@@ -395,7 +394,7 @@ public class DynamoManager<NodeIDType> {
         DynamoRequestPacket dynamoRequestPacket = this.getDynamoRequestPacket(request);
         boolean matched = false;
 
-        ReplicatedQuorumStateMachine rqsm = this.getInstance(quorumID);
+        ReplicatedDynamoStateMachine rqsm = this.getInstance(quorumID);
 
         if (rqsm != null) {
             matched = true;
@@ -420,7 +419,7 @@ public class DynamoManager<NodeIDType> {
         return null;
     }
 
-    private ReplicatedQuorumStateMachine getInstance(String quorumID) {
+    private ReplicatedDynamoStateMachine getInstance(String quorumID) {
         return this.replicatedQuorums.get(quorumID);
     }
 
@@ -430,14 +429,14 @@ public class DynamoManager<NodeIDType> {
         return this.createReplicatedQuorumFinal(quorumID, version, nodes, app, state) != null;
     }
 
-    private synchronized ReplicatedQuorumStateMachine createReplicatedQuorumFinal(
+    private synchronized ReplicatedDynamoStateMachine createReplicatedQuorumFinal(
             String quorumID, int version, Set<NodeIDType> nodes,
             Replicable app, String initialState) {
-        ReplicatedQuorumStateMachine rqsm = this.getInstance(quorumID);
+        ReplicatedDynamoStateMachine rqsm = this.getInstance(quorumID);
         if (rqsm != null)
             return rqsm;
         try {
-            rqsm = new ReplicatedQuorumStateMachine(quorumID, version, myID,
+            rqsm = new ReplicatedDynamoStateMachine(quorumID, version, myID,
                     this.integerMap.put(nodes), app != null ? app : this.myApp,
                     initialState, this);
             quorums.add(quorumID);
@@ -454,14 +453,14 @@ public class DynamoManager<NodeIDType> {
     }
 
     public Set<NodeIDType> getReplicaGroup(String quorumID) {
-        ReplicatedQuorumStateMachine rqsm = this.getInstance(quorumID);
+        ReplicatedDynamoStateMachine rqsm = this.getInstance(quorumID);
         if (rqsm == null)
             return null;
         return this.integerMap.getIntArrayAsNodeSet(rqsm.getQuorumMembersArray());
     }
 
     public boolean deleteReplicatedQuorum(String quorumID, int epoch) {
-        ReplicatedQuorumStateMachine rqsm = this.getInstance(quorumID);
+        ReplicatedDynamoStateMachine rqsm = this.getInstance(quorumID);
         if (rqsm == null)
             return true;
         if (rqsm.getVersion() > epoch) {
@@ -474,11 +473,11 @@ public class DynamoManager<NodeIDType> {
         return this.replicatedQuorums.remove(quorumID) != null;
     }
 
-    private void putInstance(String quorumID, ReplicatedQuorumStateMachine rqsm) {
+    private void putInstance(String quorumID, ReplicatedDynamoStateMachine rqsm) {
         this.replicatedQuorums.put(quorumID, rqsm);
     }
 
-    private void initializeDAG(String quorumID, ReplicatedQuorumStateMachine rqsm) {
+    private void initializeDAG(String quorumID, ReplicatedDynamoStateMachine rqsm) {
         HashMap<String, HashMap<Integer, Integer>> vectorClock = new HashMap<>();
         vectorClock.put(quorumID, new HashMap<Integer, Integer>());
         for (int i = 0; i < rqsm.getQuorumMembers().size(); i++) {
@@ -488,7 +487,7 @@ public class DynamoManager<NodeIDType> {
     }
 
     public Integer getVersion(String quorumID) {
-        ReplicatedQuorumStateMachine rqsm = this.getInstance(quorumID);
+        ReplicatedDynamoStateMachine rqsm = this.getInstance(quorumID);
         if (rqsm != null)
             return (int) rqsm.getVersion();
         return -1;

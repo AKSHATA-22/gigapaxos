@@ -18,7 +18,7 @@ public class CCApp implements Replicable {
     private HashMap<String, String> board = new HashMap<>();
     @Override
     public Request getRequest(String stringified) throws RequestParseException {
-        System.out.println("In get request of app");
+//        System.out.println("In get request of app");
         CCRequestPacket CCRequestPacket = null;
         try {
             CCRequestPacket = new CCRequestPacket(new JSONObject(stringified));

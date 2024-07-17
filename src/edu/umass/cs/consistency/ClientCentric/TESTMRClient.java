@@ -27,11 +27,13 @@ public class TESTMRClient extends ReconfigurableAppClientAsync<CCRequestPacket> 
     public int[] ports = new int[]{2000, 2001, 2002};
     private HashMap<Integer, ArrayList<CCManager.Write>> requestWrites = new HashMap<>();
     private HashMap<Integer, Timestamp> requestVectorClock = new HashMap<Integer, Timestamp>();
+    private final Long clientID;
     static final Logger log = Logger.getLogger(TESTMRClient.class
             .getName());
 
     public TESTMRClient() throws IOException {
         super();
+        this.clientID = (long) (Math.random() * Integer.MAX_VALUE);
     }
 
     @Override
@@ -56,12 +58,12 @@ public class TESTMRClient extends ReconfigurableAppClientAsync<CCRequestPacket> 
         int item = (int) (Math.random() * (mrc.items.length));
         int coord = (int) (Math.random() * (mrc.coords.length));
         String command = mrc.types[type] + " " + mrc.items[item] + " " + mrc.coords[coord];
-        return new CCRequestPacket((long) (Math.random() * Integer.MAX_VALUE), packetType, CCManager.getDefaultServiceName(),
+        return new CCRequestPacket(this.clientID, (long) (Math.random() * Integer.MAX_VALUE), packetType, CCManager.getDefaultServiceName(),
                 command, mrc.requestVectorClock, mrc.requestWrites);
     }
 
     public CCRequestPacket makeReadRequest(TESTMRClient mrc, CCRequestPacket.CCPacketType packetType) {
-        return new CCRequestPacket((long) (Math.random() * Integer.MAX_VALUE), packetType, CCManager.getDefaultServiceName(),
+        return new CCRequestPacket(this.clientID, (long) (Math.random() * Integer.MAX_VALUE), packetType, CCManager.getDefaultServiceName(),
                 "read_request", mrc.requestVectorClock, mrc.requestWrites);
     }
 
