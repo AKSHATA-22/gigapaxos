@@ -1,7 +1,6 @@
 package edu.umass.cs.consistency.ClientCentric;
 
 import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
-import edu.umass.cs.consistency.EventualConsistency.DynamoManager;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
@@ -11,7 +10,6 @@ import edu.umass.cs.gigapaxos.paxosutil.PaxosMessenger;
 import edu.umass.cs.nio.GenericMessagingTask;
 import edu.umass.cs.nio.interfaces.InterfaceNIOTransport;
 import edu.umass.cs.nio.interfaces.Stringifiable;
-import edu.umass.cs.reconfiguration.ReconfigurationConfig;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -220,7 +218,6 @@ public class CCManager<NodeIDType> {
         }
     }
     private void handlePacket(CCRequestPacket qp, CCReplicatedStateMachine mrsm, ExecutedCallback callback){
-
         CCRequestPacket.CCPacketType packetType = qp.getType();
         try {
             if (packetType == MR_READ || packetType == MR_WRITE || packetType == MW_WRITE) {
@@ -252,6 +249,9 @@ public class CCManager<NodeIDType> {
                     break;
             }
         }
+        catch (NullPointerException e){
+            log.log(Level.WARNING, "Received Acknowledgement for requestID {0} after requirement was satisfied from Node {1}.", new Object[]{qp.getRequestID(), qp.getSource()});
+        }
         catch (Exception e){
             e.printStackTrace();
         }
@@ -280,7 +280,7 @@ public class CCManager<NodeIDType> {
         this.sendRequest(ccRequestPacket, ccRequestPacket.getDestination());
     }
 
-    private void handleCVCGetAck(CCRequestPacket ccRequestPacket, CCReplicatedStateMachine mrsm) throws Exception{
+    private void handleCVCGetAck(CCRequestPacket ccRequestPacket, CCReplicatedStateMachine mrsm) throws NullPointerException{
         if(this.requestsReceived.get(ccRequestPacket.getRequestID()).putCvc(ccRequestPacket) == mrsm.getReadQuorum() - 1){
             this.cvc.put(ccRequestPacket.getClientID(), this.requestsReceived.get(ccRequestPacket.getRequestID()).getCvc());
             for (int i = 0; i < mrsm.getMembers().size(); i++) {
@@ -317,7 +317,7 @@ public class CCManager<NodeIDType> {
         this.sendRequest(ccRequestPacket, ccRequestPacket.getDestination());
     }
 
-    private void handleCVCPutAck(CCRequestPacket ccRequestPacket, CCReplicatedStateMachine mrsm) throws Exception{
+    private void handleCVCPutAck(CCRequestPacket ccRequestPacket, CCReplicatedStateMachine mrsm) throws NullPointerException{
         if(this.requestsReceived.get(ccRequestPacket.getRequestID()).incrementPutAck() == mrsm.getWriteQuorum() - 1){
             sendResponse(ccRequestPacket.getRequestID(), this.requestsReceived.get(ccRequestPacket.getRequestID()).getMrRequestPacket());
         }

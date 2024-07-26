@@ -33,6 +33,7 @@ public class DAG {
         }
         return latestNodes;
     }
+
     public ArrayList<GraphNode> latestNodesWithVectorClockAsDominant(GraphNode receivedGraphNode, boolean isPut){
         ArrayList<GraphNode> latestNodes = new ArrayList<>();
         Stack<GraphNode> graphNodeStack = new Stack<>();
@@ -116,6 +117,14 @@ public class DAG {
             }
         }
         return mapOfRequests;
+    }
+
+    public HashMap<Integer, Integer> getMinimumLatestNode(HashMap<Integer, Integer> maxVectorClock){
+        ArrayList<GraphNode> latestNodes = getLatestNodes();
+        for (GraphNode graphNode: latestNodes){
+            maxVectorClock.replaceAll((k, v) -> Math.max(maxVectorClock.get(k), graphNode.getVectorClock().get(k)));
+        }
+        return maxVectorClock;
     }
 
     public void pruneRequests(HashMap<Integer, Integer> vectorClock){

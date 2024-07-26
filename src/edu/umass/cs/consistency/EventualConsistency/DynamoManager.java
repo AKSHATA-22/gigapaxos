@@ -4,6 +4,7 @@ import edu.umass.cs.chainreplication.chainutil.ReplicatedChainException;
 import edu.umass.cs.consistency.EventualConsistency.Domain.DAG;
 import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import edu.umass.cs.consistency.EventualConsistency.Domain.RequestInformation;
+import edu.umass.cs.gigapaxos.AbstractPaxosLogger;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
@@ -15,6 +16,7 @@ import edu.umass.cs.nio.GenericMessagingTask;
 import edu.umass.cs.nio.interfaces.InterfaceNIOTransport;
 import edu.umass.cs.nio.interfaces.Stringifiable;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
@@ -33,20 +35,24 @@ public class DynamoManager<NodeIDType> {
     private final PaxosMessenger<NodeIDType> messenger; // messaging
     private final int myID;
     private final Reconcilable myApp;
-    private final HashMap<String, ReplicatedDynamoStateMachine> replicatedQuorums;;
+    private final HashMap<String, ReplicatedDynamoStateMachine> replicatedQuorums;
+    private final int REQUESTS_COUNT_BEFORE_CHECKPOINT = 5;
+    private final int DISTANCE_BEFORE_CHECKPOINT = 5;
+    private int countRequestsReceived;
     // maps the quorumID to DAG associated
     private HashMap<String, DAG> requestDAG = new HashMap<>();
+    private HashMap<String, HashMap<Integer, Integer>> checkpointVC = new HashMap<>();
     private final Stringifiable<NodeIDType> unstringer;
     // a map of NodeIDType objects to integers
     private final IntegerMap<NodeIDType> integerMap = new IntegerMap<NodeIDType>();
     //    Maps the reqestID to QuorumRequestAndCallback object
     private HashMap<Long, DynamoRequestAndCallback> requestsReceived = new HashMap<Long, DynamoRequestAndCallback>();
     private ArrayList<String> quorums = new ArrayList<String>();
-    private final LargeCheckpointer largeCheckpointer;
+//    private final LargeCheckpointer largeCheckpointer;
     public static final Logger log = Logger.getLogger(DynamoManager.class.getName());
 
     public static final Class<?> application = DynamoApp.class;
-    private ScheduledExecutorService scheduler;
+    private ScheduledExecutorService pruningScheduler;
 
 
     public static final String getDefaultServiceName() {
@@ -57,15 +63,9 @@ public class DynamoManager<NodeIDType> {
                          InterfaceNIOTransport<NodeIDType, JSONObject> niot, Replicable instance,
                          String logFolder, boolean enableNullCheckpoints) {
         this.myID = this.integerMap.put(id);
-
         this.unstringer = unstringer;
-
-        this.largeCheckpointer = new LargeCheckpointer(logFolder,
-                id.toString());
-        this.myApp = (Reconcilable) LargeCheckpointer.wrap((Reconcilable) instance, largeCheckpointer);
-
+        this.myApp = (Reconcilable) instance;
         this.replicatedQuorums = new HashMap<>();
-
         this.messenger = (new PaxosMessenger<NodeIDType>(niot, this.integerMap));
         FileHandler fileHandler = null;
         try {
@@ -77,10 +77,11 @@ public class DynamoManager<NodeIDType> {
         log.addHandler(fileHandler);
         log.setLevel(Level.FINE);
         initializePruningScheduler();
+        countRequestsReceived = 0;
     }
 
     private void initializePruningScheduler(){
-        scheduler = Executors.newScheduledThreadPool(1);
+        pruningScheduler = Executors.newScheduledThreadPool(1);
         Runnable prune = new Runnable() {
             public synchronized void run() {
                 for (String quorumID: replicatedQuorums.keySet()){
@@ -91,9 +92,36 @@ public class DynamoManager<NodeIDType> {
                 }
             }
         };
-        scheduler.scheduleAtFixedRate(prune, 1, 10, TimeUnit.MINUTES);
+        pruningScheduler.scheduleAtFixedRate(prune, 1, 10, TimeUnit.MINUTES);
     }
 
+    private int distance(HashMap<Integer, Integer> vectorClock, String quorumId){
+        int distance = 0;
+        for(int key: vectorClock.keySet()){
+            distance += (int) Math.pow(vectorClock.get(key) - checkpointVC.get(quorumId).get(key), 2);
+        }
+        return (int) Math.sqrt(distance);
+    }
+
+    private HashMap<Integer, Integer> toCheckpoint(String quorumId){
+        if(countRequestsReceived >= REQUESTS_COUNT_BEFORE_CHECKPOINT){
+            HashMap<Integer, Integer> minLatestNode = requestDAG.get(quorumId).getMinimumLatestNode(replicatedQuorums.get(quorumId).getInitialVectorClock());
+            if(distance(minLatestNode, quorumId) >= DISTANCE_BEFORE_CHECKPOINT)
+                return minLatestNode;
+        }
+        return null;
+    }
+
+    private void checkpoint(String quorumId) throws JSONException {
+        countRequestsReceived ++;
+        HashMap<Integer, Integer> nextCheckpoint = toCheckpoint(quorumId);
+        DAGLogger dagLogger = this.replicatedQuorums.get(quorumId).getDagLogger();
+        if(nextCheckpoint != null){
+            dagLogger.checkpoint(this.myApp.checkpoint(this.myApp.toString()), nextCheckpoint, quorumId);
+            log.log(Level.INFO, "Checkpoint Vector Clock changed to {0}", new Object[]{nextCheckpoint});
+            checkpointVC.put(quorumId, nextCheckpoint);
+        }
+    }
     public static class DynamoRequestAndCallback {
         protected DynamoRequestPacket dynamoRequestPacket;
         final ExecutedCallback callback;
@@ -192,30 +220,15 @@ public class DynamoManager<NodeIDType> {
                 // read_quorum_server -> node
                 handleGetAck(qp, rqsm);
                 break;
-            case TEST_GET_VC:
-                handleTestGetVC(qp, rqsm, callback);
-                break;
-            case TEST_GET_REQ:
-                handleTestGetReq(qp, rqsm, callback);
-                break;
             default:
                 break;
         }
-    }
-
-    private void handleTestGetReq(DynamoRequestPacket qp,
-                                  ReplicatedDynamoStateMachine rqsm, ExecutedCallback callback){
-        log.info("TEST GET request for : "+qp.getRequestValue()+" vc "+qp.getRequestVectorClock());
-        this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
-        qp.setAllRequests(this.requestDAG.get(rqsm.getQuorumID()).getAllRequestsWithVectorClockAsDominant(new GraphNode(qp.getRequestVectorClock())));
-        sendResponse(qp.getRequestID());
-    }
-    private void handleTestGetVC(DynamoRequestPacket qp,
-                                 ReplicatedDynamoStateMachine rqsm, ExecutedCallback callback){
-        log.info("TEST request for : "+qp.getRequestValue());
-        this.requestsReceived.putIfAbsent(qp.getRequestID(), new DynamoRequestAndCallback(qp, callback));
-        qp.setTestResponse(this.requestDAG.get(rqsm.getQuorumID()).getAllVC());
-        sendResponse(qp.getRequestID());
+        try {
+            checkpoint(rqsm.getQuorumID());
+        } catch (JSONException e) {
+            log.log(Level.SEVERE, "Could not checkpoint");
+            throw new RuntimeException(e);
+        }
     }
 
     private synchronized void handlePutRequest(DynamoRequestPacket qp,
@@ -241,6 +254,7 @@ public class DynamoManager<NodeIDType> {
                 this.sendRequest(qp, qp.getDestination());
             }
         }
+
     }
 
     public synchronized void handlePutForward(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm) {
@@ -449,6 +463,8 @@ public class DynamoManager<NodeIDType> {
         this.putInstance(quorumID, rqsm);
         this.integerMap.put(nodes);
         this.initializeDAG(quorumID, rqsm);
+        this.checkpointVC.put(quorumID, rqsm.getInitialVectorClock());
+        this.myApp.restore(this.myApp.toString(), rqsm.getDagLogger().getState());
         return rqsm;
     }
 
@@ -478,12 +494,7 @@ public class DynamoManager<NodeIDType> {
     }
 
     private void initializeDAG(String quorumID, ReplicatedDynamoStateMachine rqsm) {
-        HashMap<String, HashMap<Integer, Integer>> vectorClock = new HashMap<>();
-        vectorClock.put(quorumID, new HashMap<Integer, Integer>());
-        for (int i = 0; i < rqsm.getQuorumMembers().size(); i++) {
-            vectorClock.get(quorumID).put(rqsm.getQuorumMembers().get(i), 0);
-        }
-        this.requestDAG.put(quorumID, new DAG(vectorClock.get(quorumID)));
+        this.requestDAG.put(quorumID, new DAG(rqsm.getInitialVectorClock()));
     }
 
     public Integer getVersion(String quorumID) {

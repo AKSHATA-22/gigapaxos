@@ -2,7 +2,9 @@ package edu.umass.cs.consistency.EventualConsistency;
 
 import edu.umass.cs.consistency.Quorum.QuorumManager;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
+import org.json.JSONException;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Set;
@@ -16,6 +18,8 @@ public class ReplicatedDynamoStateMachine {
     private final String quorumID;
     private final int version;
     private DynamoManager<?> dynamoManager = null;
+
+    private DAGLogger dagLogger;
 
     public ReplicatedDynamoStateMachine(String quorumID, int version, int id,
                                         Set<Integer> members, Replicable app, String initialState,
@@ -43,14 +47,23 @@ public class ReplicatedDynamoStateMachine {
         }
         DynamoManager.log.log(Level.INFO, "Initialized member vector Clock for {0} to {1}", new Object[]{id, memberVectorClocks});
 
+        try {
+            this.dagLogger = new DAGLogger(quorumID+".log");
+            this.dagLogger.restore();
+        } catch (IOException | JSONException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public HashMap<Integer, Integer> getInitialVectorClock(){
-        HashMap<Integer,Integer> zeroVC = new HashMap<>();
-        for(int member: quorumMembers){
-            zeroVC.put(member, 0);
+        if(this.dagLogger.getVectorClock() == null) {
+            HashMap<Integer, Integer> zeroVC = new HashMap<>();
+            for (int member : quorumMembers) {
+                zeroVC.put(member, 0);
+            }
+            return zeroVC;
         }
-        return zeroVC;
+        return this.dagLogger.getVectorClock();
     }
     public ArrayList<Integer> getQuorumMembers() {
         return this.quorumMembers;
@@ -77,6 +90,10 @@ public class ReplicatedDynamoStateMachine {
 
     public int getVersion() {
         return this.version;
+    }
+
+    public DAGLogger getDagLogger() {
+        return dagLogger;
     }
 
     public HashMap<Integer, HashMap<Integer, Integer>> getMemberVectorClocks() {

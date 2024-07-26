@@ -24,7 +24,7 @@ public class DynamoCoordinator<NodeIDType>
         super(app, niot);
         assert (niot instanceof JSONMessenger);
         this.dynamoManager = new DynamoManager(myID, unstringer,
-                (JSONMessenger<NodeIDType>) niot, this, null,
+                (JSONMessenger<NodeIDType>) niot, this, "logs/DAGLogs.log",
                 true);
     }
     private static Set<IntegerPacketType> requestTypes = null;

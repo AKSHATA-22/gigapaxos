@@ -25,6 +25,7 @@ public class TESTMR {
                     CCRequestPacket request = testmrClient.makeWriteRequest(testmrClient, CCRequestPacket.CCPacketType.MR_WRITE);
                     log.log(Level.INFO, "Sent write request from client 0");
                     testmrClient.sendAppRequest(testmrClient, request, testmrClient.ports[(int) (Math.random() * (testmrClient.ports.length))]);
+                    Thread.sleep(500);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -37,34 +38,38 @@ public class TESTMR {
     public void test01_sendRequestToOneExtraServer() throws Exception{
         TESTMRClient testmrClient = new TESTMRClient();
         testmrClient.sendAppRequest(testmrClient, testmrClient.makeWriteRequest(testmrClient, CCRequestPacket.CCPacketType.MR_WRITE), 2000);
-        Thread.sleep(1000);
+        Thread.sleep(500);
         testmrClient.sendAppRequest(testmrClient, testmrClient.makeWriteRequest(testmrClient, CCRequestPacket.CCPacketType.MR_WRITE), 2000);
-        Thread.sleep(300);
+        Thread.sleep(500);
         testmrClient.sendAppRequest(testmrClient, testmrClient.makeReadRequest(testmrClient, CCRequestPacket.CCPacketType.MR_READ), 2001);
-        Thread.sleep(300);
+        Thread.sleep(500);
         Assert.assertTrue(passed.get());
     }
     @Test
-    public void test02_sendRequestToRandomServers() throws IOException{
+    public void test02_sendRequestToRandomServers() throws Exception{
         passed.set(true);
         TESTMRClient testmrClient = new TESTMRClient();
         testmrClient.sendAppRequest(testmrClient, testmrClient.makeWriteRequest(testmrClient, CCRequestPacket.CCPacketType.MR_WRITE), testmrClient.ports[(int) (Math.random() * (testmrClient.ports.length))]);
+        Thread.sleep(500);
         testmrClient.sendAppRequest(testmrClient, testmrClient.makeWriteRequest(testmrClient, CCRequestPacket.CCPacketType.MR_WRITE), testmrClient.ports[(int) (Math.random() * (testmrClient.ports.length))]);
+        Thread.sleep(500);
         testmrClient.sendAppRequest(testmrClient, testmrClient.makeReadRequest(testmrClient, CCRequestPacket.CCPacketType.MR_READ), testmrClient.ports[(int) (Math.random() * (testmrClient.ports.length))]);
+        Thread.sleep(500);
         Assert.assertTrue(passed.get());
     }
     @Test
-    public void test03_sendRandomRequestsToRandomServers() throws IOException{
+    public void test03_sendRandomRequestsToRandomServers() throws Exception{
         passed.set(true);
         TESTMRClient testmrClient = new TESTMRClient();
         for (int i = 0; i < 100; i++) {
             CCRequestPacket request = i % 2 == 0 ? testmrClient.makeWriteRequest(testmrClient, CCRequestPacket.CCPacketType.MR_WRITE) : testmrClient.makeReadRequest(testmrClient, CCRequestPacket.CCPacketType.MR_READ);
             testmrClient.sendAppRequest(testmrClient, request, testmrClient.ports[(int) (Math.random() * (testmrClient.ports.length))]);
+            Thread.sleep(500);
         }
         Assert.assertTrue(passed.get());
     }
     @Test
-    public void test04_sendReadRequestFromTwoClientsToRandomServer() throws IOException {
+    public void test04_sendReadRequestFromTwoClientsToRandomServer() throws Exception {
         passed.set(true);
         ArrayList<TESTMRClient> clients = new ArrayList<TESTMRClient>();
         for (int i = 0; i < 2; i++) {
@@ -75,12 +80,13 @@ public class TESTMR {
             TESTMRClient mrClient = clients.get((int) (Math.random() * (2)));
             CCRequestPacket request = mrClient.makeReadRequest(mrClient, CCRequestPacket.CCPacketType.MR_READ);
             mrClient.sendAppRequest(mrClient, request, mrClient.ports[(int) (Math.random() * (mrClient.ports.length))]);
+            Thread.sleep(500);
         }
         keepRunning.set(false);
         Assert.assertTrue(passed.get());
     }
     @Test
-    public void test05_sendReadRequestFromMultipleClientsToRandomServer() throws IOException {
+    public void test05_sendReadRequestFromMultipleClientsToRandomServer() throws Exception {
         passed.set(true);
         keepRunning.set(true);
         ArrayList<TESTMRClient> clients = new ArrayList<TESTMRClient>();
@@ -92,6 +98,7 @@ public class TESTMR {
             TESTMRClient mrClient = clients.get((int) (Math.random() * (noOfClients)));
             CCRequestPacket request = mrClient.makeReadRequest(mrClient, CCRequestPacket.CCPacketType.MR_READ);
             mrClient.sendAppRequest(mrClient, request, mrClient.ports[(int) (Math.random() * (mrClient.ports.length))]);
+            Thread.sleep(500);
         }
         keepRunning.set(false);
         Assert.assertTrue(passed.get());
