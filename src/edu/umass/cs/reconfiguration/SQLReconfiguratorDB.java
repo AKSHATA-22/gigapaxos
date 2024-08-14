@@ -904,17 +904,7 @@ public class SQLReconfiguratorDB<NodeIDType> extends
 		return this.updateState(rcGroup, state, null);
 	}
 
-	@Override
-	public GraphNode reconcile(ArrayList<GraphNode> requests) {
-		System.out.println("Returning null from SQLReconfiguratorDB");
-		return null;
-	}
 
-	@Override
-	public String stateForReconcile() {
-		System.out.println("Returning null from SQLReconfiguratorDB");
-		return null;
-	}
 
 	/* The second argument "state" here is implemented as the name of the file
 	 * where the checkpoint state is actually stored. We assume that each RC

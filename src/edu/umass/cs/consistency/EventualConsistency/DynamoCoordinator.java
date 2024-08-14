@@ -1,5 +1,6 @@
 package edu.umass.cs.consistency.EventualConsistency;
 
+import edu.umass.cs.gigapaxos.PaxosCoordinator;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
@@ -8,6 +9,7 @@ import edu.umass.cs.nio.interfaces.IntegerPacketType;
 import edu.umass.cs.nio.interfaces.Messenger;
 import edu.umass.cs.nio.interfaces.Stringifiable;
 import edu.umass.cs.reconfiguration.AbstractReplicaCoordinator;
+import edu.umass.cs.reconfiguration.PaxosReplicaCoordinator;
 import edu.umass.cs.reconfiguration.reconfigurationpackets.ReconfigurationPacket;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
 
@@ -16,18 +18,26 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class DynamoCoordinator<NodeIDType>
-        extends AbstractReplicaCoordinator<NodeIDType> {
+        extends PaxosReplicaCoordinator<NodeIDType> {
     private final DynamoManager<NodeIDType> dynamoManager;
     public DynamoCoordinator(Replicable app, NodeIDType myID,
                              Stringifiable<NodeIDType> unstringer,
                              Messenger<NodeIDType, ?> niot) {
-        super(app, niot);
+        super(app, myID, unstringer, niot);
         assert (niot instanceof JSONMessenger);
         this.dynamoManager = new DynamoManager(myID, unstringer,
                 (JSONMessenger<NodeIDType>) niot, this, "logs/DAGLogs.log",
                 true);
+        setReconfigurationServices();
     }
     private static Set<IntegerPacketType> requestTypes = null;
+    private static final Set<String> reconfigurationServices = new HashSet<>();
+    private void setReconfigurationServices(){
+        reconfigurationServices.add("AR_AR_NODES");
+        reconfigurationServices.add("AR_RC_NODES");
+        reconfigurationServices.add("RC_RC_NODES");
+        reconfigurationServices.add("RC_AR_NODES");
+    }
     @Override
     public Set<IntegerPacketType> getRequestTypes() {
 
@@ -53,8 +63,9 @@ public class DynamoCoordinator<NodeIDType>
 
     @Override
     public boolean createReplicaGroup(String serviceName, int epoch, String state, Set<NodeIDType> nodes) {
-        System.out.println(">>>>> Create quorum: "+serviceName+", on "+this.getMyID());
-
+        if(reconfigurationServices.contains(serviceName)){
+            return super.createReplicaGroup(serviceName, epoch, state, nodes);
+        }
         return this.dynamoManager.createReplicatedQuorumForcibly(
                 serviceName, epoch, nodes, this, state);
     }

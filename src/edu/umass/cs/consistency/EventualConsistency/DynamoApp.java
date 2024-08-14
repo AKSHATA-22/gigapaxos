@@ -7,6 +7,9 @@ import edu.umass.cs.gigapaxos.interfaces.Replicable;
 import edu.umass.cs.gigapaxos.interfaces.Request;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
 import edu.umass.cs.reconfiguration.ReconfigurationConfig;
+import edu.umass.cs.reconfiguration.interfaces.Reconfigurable;
+import edu.umass.cs.reconfiguration.interfaces.ReconfigurableRequest;
+import edu.umass.cs.reconfiguration.interfaces.Repliconfigurable;
 import edu.umass.cs.reconfiguration.reconfigurationutils.RequestParseException;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -16,7 +19,7 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class DynamoApp implements Reconcilable {
+public class DynamoApp implements Repliconfigurable {
     public String name = "DynamoReplicationApp";
     private HashMap<String, Integer> cart = new HashMap<>();
     private Logger log = Logger.getLogger(DynamoApp.class.getName());
@@ -94,31 +97,29 @@ public class DynamoApp implements Reconcilable {
     @Override
     public String checkpoint(String name) {
         System.out.println("In checkpoint");
-        return this.cart.toString();
+        JSONObject jsonObject = new JSONObject(this.cart);
+        return jsonObject.toString();
     }
-    @Override
-    public String stateForReconcile(){
-        StringBuilder stringBuilder = new StringBuilder();
-        for (String key: this.cart.keySet()){
-            stringBuilder.append(key).append("=").append(this.cart.get(key)).append(",");
+    private void unjsonstringifyState(String state) throws JSONException {
+        System.out.println(state);
+        JSONObject jsonStateObject = new JSONObject(state);
+
+        Iterator keys = jsonStateObject.keys();
+        while (keys.hasNext()) {
+            String key = keys.next().toString();
+            Integer value = jsonStateObject.getInt(key);
+            this.cart.put(key, value);
         }
-        return stringBuilder.toString();
-    }
-    public void unstringifyState(String state){
-        if(!state.equals("{}")){
-            for (String keyValuePair : state.split(",")) {
-                String[] keyValue = keyValuePair.split("=");
-                this.cart.put(keyValue[0], Integer.parseInt(keyValue[1]));
-            }
-        }
+        System.out.println(this.cart);
+
     }
     @Override
     public boolean restore(String name, String state) {
-        System.out.println("In restore");
+        System.out.println("In restore for state: "+state);
         this.cart = new HashMap<String, Integer>();
         if(state != null){
             try{
-                unstringifyState(state);
+                unjsonstringifyState(state);
             }
             catch (Exception e){
                 System.out.println("Exception encountered: "+e);
@@ -127,17 +128,34 @@ public class DynamoApp implements Reconcilable {
         }
         return true;
     }
+
     @Override
-    public GraphNode reconcile(ArrayList<GraphNode> requests) {
-        if (requests.isEmpty()){
-            log.log(Level.WARNING, "Reconcile method called on an empty array of requests.");
-            return null;
-        }
-        try {
-            return DAG.getDominantVC(requests);
-        } catch (Exception e) {
-            log.log(Level.WARNING, "Error in reconciling the requests: " + e.toString());
-        }
-        return null;
+    public ReconfigurableRequest getStopRequest(String name, int epoch) {
+        DynamoManager.log.log(Level.INFO, "....Get stop request called...");
+        return new DynamoRequestPacket(DynamoRequestPacket.DynamoPacketType.STOP, name);
+    }
+
+    @Override
+    public String getFinalState(String name, int epoch) {
+        DynamoManager.log.log(Level.INFO, "....Get final state called...");
+        return this.checkpoint(name);
+    }
+
+    @Override
+    public void putInitialState(String name, int epoch, String state) {
+        DynamoManager.log.log(Level.INFO, "....Put initial state called...");
+        this.restore(name, state);
+    }
+
+    @Override
+    public boolean deleteFinalState(String name, int epoch) {
+        DynamoManager.log.log(Level.INFO, "....Delete final state called...");
+        cart.clear();
+        return true;
+    }
+
+    @Override
+    public Integer getEpoch(String name) {
+        return 0;
     }
 }

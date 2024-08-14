@@ -24,6 +24,6 @@ import edu.umass.cs.gigapaxos.interfaces.Replicable;
 /**
 @author V. Arun
  */
-public interface Repliconfigurable extends Replicable, Reconfigurable, Reconcilable {
+public interface Repliconfigurable extends Replicable, Reconfigurable {
 	// just a combined interface for convenience
 }

@@ -1,5 +1,6 @@
 package edu.umass.cs.consistency.EventualConsistency.Domain;
 
+import edu.umass.cs.consistency.EventualConsistency.DynamoApp;
 import edu.umass.cs.consistency.EventualConsistency.DynamoManager;
 
 import java.util.ArrayList;
@@ -12,6 +13,7 @@ public class DAG {
 
     public DAG(HashMap<Integer, Integer> vectorClock) {
         this.rootNode = new GraphNode(vectorClock);
+        DynamoManager.log.log(Level.INFO, "Set {0} as the rootNode", new Object[]{vectorClock});
     }
 
     public ArrayList<GraphNode> getLatestNodes(){
@@ -22,7 +24,12 @@ public class DAG {
         while (!graphNodeStack.isEmpty()){
             GraphNode current = graphNodeStack.pop();
             visited.add(current.getVectorClock());
+//            DynamoManager.log.log(Level.INFO, "Current vc: "+current.getVectorClock().toString()+" children "+current.getChildren().size()+" isStop "+current.isStop());
             if(current.getChildren().isEmpty()){
+                if (current.isStop()){
+                    DynamoManager.log.log(Level.INFO, "Current node is stop node");
+                    return null;
+                }
                 latestNodes.add(current);
                 continue;
             }
@@ -42,14 +49,13 @@ public class DAG {
         DynamoManager.log.log(Level.INFO, "Received node: {0}", new Object[]{receivedGraphNode.getVectorClock()});
         while (!graphNodeStack.isEmpty()){
             GraphNode current = graphNodeStack.pop();
-            if(current.isDominant(receivedGraphNode) && isPut){
+            if((current.isDominant(receivedGraphNode) && isPut) || current.isStop()){
                 return null;
             }
             visited.add(current.getVectorClock());
             if(receivedGraphNode.isDominant(current)){
                 addNode(latestNodes, current);
                 DynamoManager.log.log(Level.INFO, "Adding Current node: {0}, children: {1}, isEmpty: {2}", new Object[]{current.getVectorClock(), current.getChildren(), current.getChildren().isEmpty()});
-                continue;
             }
             for(GraphNode childNode: current.getChildren()){
                 if (!visited.contains(childNode.getVectorClock()))
@@ -59,6 +65,10 @@ public class DAG {
         return latestNodes;
     }
     public static GraphNode createDominantChildGraphNode(ArrayList<GraphNode> graphNodesList, HashMap<Integer, Integer> vectorClock){
+        if(graphNodesList == null){
+            return null;
+        }
+        DynamoManager.log.log(Level.INFO, "GraphNode list size: "+graphNodesList.size());
         GraphNode dominantChildNode = new GraphNode();
         for(GraphNode graphNode: graphNodesList){
             for(Integer key: vectorClock.keySet()){
@@ -69,6 +79,7 @@ public class DAG {
             graphNode.addChildNode(dominantChildNode);
         }
         dominantChildNode.setVectorClock(vectorClock);
+        DynamoManager.log.log(Level.INFO, "Current vc: "+dominantChildNode.getVectorClock().toString()+" children "+dominantChildNode.getChildren().size()+" isStop "+dominantChildNode.isStop());
         return dominantChildNode;
     }
 
@@ -87,6 +98,12 @@ public class DAG {
     public static void addChildNode(ArrayList<GraphNode> graphNodesList, GraphNode childNode){
         for(GraphNode graphNode: graphNodesList){
             graphNode.addChildNode(childNode);
+        }
+    }
+    public void addChildrenNodes(ArrayList<HashMap<Integer, Integer>> graphNodesList, GraphNode graphNode){
+        for(HashMap<Integer, Integer> graphNodeVC: graphNodesList){
+            graphNode.addChildNode(new GraphNode(graphNodeVC));
+            DynamoManager.log.log(Level.INFO, "Added {0} as the child of {1}}", new Object[]{graphNodeVC, graphNode.getVectorClock()});
         }
     }
 
@@ -119,12 +136,11 @@ public class DAG {
         return mapOfRequests;
     }
 
-    public HashMap<Integer, Integer> getMinimumLatestNode(HashMap<Integer, Integer> maxVectorClock){
-        ArrayList<GraphNode> latestNodes = getLatestNodes();
+    public HashMap<Integer, Integer> getMinimumLatestNode(HashMap<Integer, Integer> minVectorClock, ArrayList<GraphNode> latestNodes){
         for (GraphNode graphNode: latestNodes){
-            maxVectorClock.replaceAll((k, v) -> Math.max(maxVectorClock.get(k), graphNode.getVectorClock().get(k)));
+            minVectorClock.replaceAll((k, v) -> Math.min(minVectorClock.get(k), graphNode.getVectorClock().get(k)));
         }
-        return maxVectorClock;
+        return minVectorClock;
     }
 
     public void pruneRequests(HashMap<Integer, Integer> vectorClock){
@@ -145,7 +161,11 @@ public class DAG {
                 current.setRequests(null);
             }
         }
+        if(!nodes.isEmpty()){
+            rootNode.setChildren(new ArrayList<>());
+        }
         for(GraphNode node: nodes){
+            DynamoManager.log.info("Adding as child of root node "+node.getVectorClock());
             rootNode.addChildNode(node);
         }
     }

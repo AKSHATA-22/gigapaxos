@@ -48,6 +48,9 @@ public class TESTDynamoClient extends ReconfigurableAppClientAsync<DynamoRequest
         return new HashSet<>(Arrays.asList(DynamoRequestPacket.DynamoPacketType.values()));
     }
 
+    public static DynamoRequestPacket makeStopRequest() {
+        return new DynamoRequestPacket(DynamoRequestPacket.DynamoPacketType.STOP, DynamoManager.getDefaultServiceName());
+    }
     public static DynamoRequestPacket makePutRequest(TESTDynamoClient dc, int item) {
         JSONObject jsonObject = new JSONObject();
         String putString;

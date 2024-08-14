@@ -23,10 +23,17 @@ public class TESTDynamo {
     }
 
     @Test
+    public void test00_putOnOneServer() throws Exception{
+        System.out.println("TEST 00 starting");
+        testDynamoClient.sendAppRequest(TESTDynamoClient.makePutRequest(testDynamoClient, 0), testDynamoClient.ports[1]);
+        Thread.sleep(100);
+        Assert.assertTrue(passed.get());
+    }
+    @Test
     public void test01_twoPutOneGetOnDifferentServers() throws Exception{
         System.out.println("TEST 01 starting");
-        testDynamoClient.sendAppRequest(TESTDynamoClient.makePutRequest(testDynamoClient, 0), testDynamoClient.ports[0]);
         testDynamoClient.sendAppRequest(TESTDynamoClient.makePutRequest(testDynamoClient, 0), testDynamoClient.ports[1]);
+        testDynamoClient.sendAppRequest(TESTDynamoClient.makePutRequest(testDynamoClient, 0), testDynamoClient.ports[0]);
         Thread.sleep(100);
         testDynamoClient.sendAppRequest(TESTDynamoClient.makeGetRequest(testDynamoClient, 0), testDynamoClient.ports[2]);
         Thread.sleep(200);
@@ -61,6 +68,15 @@ public class TESTDynamo {
         }
         Assert.assertTrue(passed.get());
     }
+    @Test
+    public void test05_sendStopRequest() throws Exception{
+        System.out.println("TEST 05 starting");
+        testDynamoClient.sendAppRequest(TESTDynamoClient.makeStopRequest(), testDynamoClient.ports[1]);
+        Thread.sleep(100);
+        Assert.assertTrue(true);
+    }
+
+
 //    @Test
 //    public void test05_checkVC() throws Exception{
 //        Thread.sleep(100);

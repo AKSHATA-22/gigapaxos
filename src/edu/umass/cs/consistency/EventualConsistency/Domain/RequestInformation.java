@@ -5,8 +5,9 @@ package edu.umass.cs.consistency.EventualConsistency.Domain;
  */
 
 public class RequestInformation {
-    private final long requestID;
-    private final String requestQuery;
+    private long requestID;
+    private String requestQuery;
+    public RequestInformation(){}
 
     public RequestInformation(long requestID, String requestQuery) {
         this.requestID = requestID;

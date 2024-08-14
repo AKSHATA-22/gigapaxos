@@ -3,6 +3,7 @@ package edu.umass.cs.consistency.EventualConsistency;
 import edu.umass.cs.gigapaxos.interfaces.ClientRequest;
 import edu.umass.cs.nio.JSONPacket;
 import edu.umass.cs.nio.interfaces.IntegerPacketType;
+import edu.umass.cs.reconfiguration.interfaces.ReconfigurableRequest;
 import edu.umass.cs.reconfiguration.interfaces.ReplicableRequest;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -11,27 +12,42 @@ import org.json.JSONObject;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 
-public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest, ClientRequest {
+public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest, ClientRequest, ReconfigurableRequest {
     private final long requestID;
 //    Maps the versionVector hashmap to the final response string
-    private String requestValue = null;
+    private String requestValue = "";
     private HashMap<Integer, Integer> requestVectorClock = new HashMap<Integer, Integer>();
     private HashMap<Long, String> allRequests = new HashMap<>();
     //not being used
     private ArrayList<HashMap<Integer, Integer>> testResponse = new ArrayList<>();
-    private Integer version = -1;
+    private Integer checkpointVersion = -1;
     private DynamoPacket responsePacket = null;
     private int destination = -1;
     private int source = -1;
     private InetSocketAddress clientSocketAddress = null;
     private DynamoPacketType packetType;
     private String quorumID = null;
+
+    @Override
+    public int getEpochNumber() {
+        return 0;
+    }
+
+    @Override
+    public boolean isStop() {
+        return this.packetType == DynamoPacketType.STOP;
+    }
+
     static class DynamoPacket{
         HashMap<Integer, Integer> vectorClock = new HashMap<>();
         HashMap<Long, String> allRequests = new HashMap<>();
         String value;
+        DynamoPacket(String value){
+            this.value = value;
+        }
         DynamoPacket(HashMap<Integer, Integer> vectorClock, String value){
             this.vectorClock = vectorClock;
             this.value = value;
@@ -127,6 +143,9 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         this.testResponse.add(vectorClock);
     }
 
+    public Integer getCheckpointVersion() {
+        return checkpointVersion;
+    }
 
     public enum DynamoPacketType implements IntegerPacketType {
         PUT("PUT", 1301),
@@ -136,14 +155,19 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         PUT_ACK("PUT_ACK", 1305),
         GET_ACK("GET_ACK", 1306),
         RESPONSE("RESPONSE", 1307),
-        STATUS_REPORT("STATUS_REPORT", 1308),
-        TEST_GET_VC("TEST_GET_VC", 1309),
-        TEST_GET_REQ("TEST_GET_REQ", 1310)
+        RECOVERY("RECOVERY", 1308),
+        RECOVERY_ACK("RECOVERY_ACK", 1309),
+        STATE_TRANSMIT_INIT("STATE_TRANSMIT_INIT", 1310),
+        STATE_TRANSMIT("STATE_TRANSMIT", 1311),
+        STOP("STOP", 1312),
+        TEST_GET_VC("TEST_GET_VC", 1313),
+        TEST_GET_REQ("TEST_GET_REQ", 1314)
         ;
         String label;
         int number;
         private static HashMap<String, DynamoPacketType> labels = new HashMap<String, DynamoPacketType>();
         private static HashMap<Integer, DynamoPacketType> numbers = new HashMap<Integer, DynamoPacketType>();
+        private static final HashSet<DynamoPacketType> helpers = new HashSet<>();
         DynamoPacketType(String s, int t) {
             this.label = s;
             this.number = t;
@@ -158,23 +182,32 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
                     assert(false): "Duplicate or inconsistent enum type for ChainPacketType";
                 }
             }
+            helpers.add(RECOVERY);
+            helpers.add(RECOVERY_ACK);
+            helpers.add(STATE_TRANSMIT_INIT);
+            helpers.add(STATE_TRANSMIT);
+            helpers.add(TEST_GET_VC);
+            helpers.add(TEST_GET_REQ);
+            helpers.add(STOP);
         }
 
         public String getLabel() {
             return label;
         }
-
         @Override
         public int getInt() {
             return this.number;
         }
+
         public static DynamoPacketType getDynamoPacketType(int type){
             return DynamoPacketType.numbers.get(type);
         }
         public static DynamoPacketType getDynamoPacketType(String label){
             return DynamoPacketType.labels.get(label);
         }
-
+        public static HashSet<DynamoPacketType> getHelpers(){
+            return helpers;
+        }
     }
     public DynamoRequestPacket(long reqID, DynamoPacketType reqType,
                                DynamoRequestPacket req){
@@ -191,6 +224,23 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         this.destination = req.destination;
         this.source = req.source;
         this.clientSocketAddress  = req.clientSocketAddress;
+        this.checkpointVersion = req.checkpointVersion;
+    }
+
+    public DynamoRequestPacket(DynamoPacketType reqType, String quorumID, HashMap<Integer, Integer> requestVectorClock){
+        super(reqType);
+
+        this.packetType = reqType;
+        this.requestID = (long) (Math.random() * Integer.MAX_VALUE);
+        this.quorumID = quorumID;
+        this.requestVectorClock = requestVectorClock;
+    }
+    public DynamoRequestPacket(DynamoPacketType reqType, String quorumID){
+        super(reqType);
+
+        this.requestID = (long) (Math.random() * Integer.MAX_VALUE);
+        this.packetType = reqType;
+        this.quorumID = quorumID;
     }
     public DynamoRequestPacket(JSONObject json) throws JSONException{
         super(json);
@@ -198,6 +248,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         this.packetType = DynamoPacketType.getDynamoPacketType(json.getInt("type"));
         this.requestID = json.getLong("requestID");
         this.requestValue = json.getString("requestValue");
+        this.checkpointVersion = json.getInt("checkpointVersion");
         DynamoPacket dynamoPacket = this.strToDynamoPck(json);
         this.responsePacket = dynamoPacket != null ? dynamoPacket : new DynamoPacket(new HashMap<>(), "", new HashMap<>());
         JSONObject requestVectorClock = new JSONObject(json.getString("requestVectorClock"));
@@ -243,8 +294,8 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
     public void setQuorumID(String quorumID){
         this.quorumID = quorumID;
     }
-    public void setVersion(Integer version){
-        this.version = version;
+    public void setCheckpointVersion(Integer checkpointVersion){
+        this.checkpointVersion = checkpointVersion;
     }
     public void setPacketType(DynamoPacketType packetType){
         this.packetType = packetType;
@@ -293,14 +344,13 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
 
     @Override
     public ClientRequest getResponse() {
-//        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! getResponse is called!!!!!!!!!!!!");
-
         DynamoRequestPacket reply = new DynamoRequestPacket(this.requestID,
                 DynamoPacketType.RESPONSE, this);
 //        System.out.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Response value is "+response+"!!!!!!!!!!!!");
         reply.testResponse = this.testResponse;
         reply.responsePacket  = this.responsePacket;
         reply.allRequests = this.allRequests;
+        reply.checkpointVersion = this.checkpointVersion;
         return reply;
     }
 
@@ -346,6 +396,7 @@ public class DynamoRequestPacket extends JSONPacket implements ReplicableRequest
         json.put("source", this.source);
         json.put("testResponse", this.testResponse);
         json.put("allRequests", this.allRequests);
+        json.put("checkpointVersion", this.checkpointVersion);
         return json;
     }
 

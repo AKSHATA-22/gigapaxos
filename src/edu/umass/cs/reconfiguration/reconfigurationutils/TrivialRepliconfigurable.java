@@ -130,19 +130,7 @@ public class TrivialRepliconfigurable implements Repliconfigurable, AppRequestPa
 		throw new RuntimeException("Can not get stop request for a non-replicable app");
 	}
 
-	@Override
-	public GraphNode reconcile(ArrayList<GraphNode> requests) {
-		if(this.app instanceof Reconcilable)
-			return ((Reconcilable)this.app).reconcile(requests);
-		throw new RuntimeException("Can not get reconcile request for a non-reconcilable app");
-	}
 
-	@Override
-	public String stateForReconcile() {
-		if(this.app instanceof Reconcilable)
-			return ((Reconcilable)this.app).stateForReconcile();
-		throw new RuntimeException("Can not get reconcile request for a non-reconcilable app");
-	}
 
 	public String toString() {
 		return this.app.toString();

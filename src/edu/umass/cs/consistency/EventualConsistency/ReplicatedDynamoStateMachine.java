@@ -28,6 +28,14 @@ public class ReplicatedDynamoStateMachine {
         this.quorumID = quorumID;
         this.version = version;
         this.dynamoManager = qm;
+        try {
+            this.dagLogger = new DAGLogger(id+"."+quorumID);
+            this.dagLogger.restore();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        } catch (RuntimeException | JSONException e) {
+            DynamoManager.log.log(Level.INFO, "Restore not performed");
+        }
         if(!this.quorumMembers.contains(id)){
             this.quorumMembers.add(id);
         }
@@ -47,23 +55,25 @@ public class ReplicatedDynamoStateMachine {
         }
         DynamoManager.log.log(Level.INFO, "Initialized member vector Clock for {0} to {1}", new Object[]{id, memberVectorClocks});
 
-        try {
-            this.dagLogger = new DAGLogger(quorumID+".log");
-            this.dagLogger.restore();
-        } catch (IOException | JSONException e) {
-            throw new RuntimeException(e);
-        }
+
     }
 
     public HashMap<Integer, Integer> getInitialVectorClock(){
-        if(this.dagLogger.getVectorClock() == null) {
+        if(this.dagLogger.getCheckpointLog() == null || this.dagLogger.getCheckpointLog().getVectorClock() == null) {
             HashMap<Integer, Integer> zeroVC = new HashMap<>();
             for (int member : quorumMembers) {
                 zeroVC.put(member, 0);
             }
             return zeroVC;
         }
-        return this.dagLogger.getVectorClock();
+        return this.dagLogger.getCheckpointLog().getVectorClock();
+    }
+    public HashMap<Integer, Integer> getMaxVectorClock(){
+        HashMap<Integer, Integer> maxVC = new HashMap<>();
+        for (int member : quorumMembers) {
+            maxVC.put(member, Integer.MAX_VALUE);
+        }
+        return maxVC;
     }
     public ArrayList<Integer> getQuorumMembers() {
         return this.quorumMembers;

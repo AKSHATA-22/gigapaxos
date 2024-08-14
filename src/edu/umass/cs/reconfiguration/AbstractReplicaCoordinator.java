@@ -424,15 +424,7 @@ public abstract class AbstractReplicaCoordinator<NodeIDType> implements
 
 		: app.restore(name, state);
 	}
-	@Override
-	public GraphNode reconcile(ArrayList<GraphNode> requests) {
-		return app.reconcile(requests);
-	}
 
-	@Override
-	public String stateForReconcile() {
-		return app.stateForReconcile();
-	}
 
 	/* Call back active replica for stop requests, else call default callback.
 	 * Should really be private, but sometimes we may need to trigger a callback
