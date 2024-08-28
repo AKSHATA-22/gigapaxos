@@ -126,7 +126,7 @@ public class TESTDynamo {
 
             //Send a PUT request to AR0. AR3 receives PUT_FWD with a higher checkpoint version. Triggers state transfer
             testDynamoClient.sendAppRequest(TESTDynamoClient.makePutRequest(testDynamoClient, 0), testDynamoClient.ports[0]);
-            Thread.sleep(100);
+            Thread.sleep(500);
 
             //Check if state of AR3 is most recent
             List<CheckpointLog> checkpointFiles = mapJsonFilesToObjects(getJsonFiles(System.getProperty("user.dir") + "/logs/DAGLogs/"), CheckpointLog.class);
