@@ -60,7 +60,6 @@ public class GraphNode {
     }
     public void addRequest(DynamoRequestPacket dynamoRequestPacket){
         this.setStop(dynamoRequestPacket.isStop());
-
         requests.add(new RequestInformation(dynamoRequestPacket.getRequestID(), dynamoRequestPacket.getType().getLabel() + " " + dynamoRequestPacket.getRequestValue()));
     }
     private void addAllRequests(HashMap<Long, String> allRequests){
@@ -98,7 +97,6 @@ public class GraphNode {
     }
 
     public boolean isMinor(HashMap <Integer, Integer> vectorClock){
-        System.out.println(this.getVectorClock()+" "+vectorClock);
         for (int key : this.getVectorClock().keySet()) {
             if(this.getVectorClock().get(key) >= vectorClock.get(key)){
                 return false;

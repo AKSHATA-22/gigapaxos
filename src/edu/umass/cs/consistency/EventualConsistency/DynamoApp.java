@@ -69,14 +69,8 @@ public class DynamoApp implements Repliconfigurable {
             else if(getPUTRequestTypes().contains(((DynamoRequestPacket) request).getType())){
                 log.log(Level.INFO, "In Dynamo App for PUT request");
                 try {
-                    System.out.println("-----------------App PUT"+((DynamoRequestPacket) request).getRequestValue()+"--"+((DynamoRequestPacket) request).getRequestID()+"----------------------------");
                     JSONObject jsonObject = new JSONObject(((DynamoRequestPacket) request).getRequestValue());
-                    if (this.cart.get(jsonObject.getString("key")) != null){
-                        this.cart.put(jsonObject.getString("key"), this.cart.get(jsonObject.getString("key"))+1);
-                    }
-                    else {
-                        this.cart.put(jsonObject.getString("key"), 1);
-                    }
+                    this.cart.put(jsonObject.getString("key"), this.cart.getOrDefault(jsonObject.getString("key"), 0)+jsonObject.getInt("value"));
                 } catch (JSONException e) {
                     log.log(Level.WARNING, "Check the request value");
                     throw new RuntimeException(e);
@@ -96,12 +90,10 @@ public class DynamoApp implements Repliconfigurable {
 
     @Override
     public String checkpoint(String name) {
-        System.out.println("In checkpoint");
         JSONObject jsonObject = new JSONObject(this.cart);
         return jsonObject.toString();
     }
     private void unjsonstringifyState(String state) throws JSONException {
-        System.out.println(state);
         JSONObject jsonStateObject = new JSONObject(state);
 
         Iterator keys = jsonStateObject.keys();
@@ -110,12 +102,10 @@ public class DynamoApp implements Repliconfigurable {
             Integer value = jsonStateObject.getInt(key);
             this.cart.put(key, value);
         }
-        System.out.println(this.cart);
 
     }
     @Override
     public boolean restore(String name, String state) {
-        System.out.println("In restore for state: "+state);
         this.cart = new HashMap<String, Integer>();
         if(state != null){
             try{

@@ -56,28 +56,26 @@ public class DynamoCoordinator<NodeIDType>
 
     @Override
     public boolean coordinateRequest(Request request, ExecutedCallback callback) throws IOException, RequestParseException {
-        // coordinate the request by sending in the respective quorum
-//        System.out.println("In coordinate request");
-        return this.dynamoManager.propose(request.getServiceName(), request, callback)!= null;
+        System.out.println(request.getRequestType());
+        return reconfigurationServices.contains(request.getServiceName()) ? super.coordinateRequest(request, callback) :
+                this.dynamoManager.propose(request.getServiceName(), request, callback)!= null;
     }
 
     @Override
     public boolean createReplicaGroup(String serviceName, int epoch, String state, Set<NodeIDType> nodes) {
-        if(reconfigurationServices.contains(serviceName)){
-            return super.createReplicaGroup(serviceName, epoch, state, nodes);
-        }
-        return this.dynamoManager.createReplicatedQuorumForcibly(
+        return reconfigurationServices.contains(serviceName) ? super.createReplicaGroup(serviceName, epoch, state, nodes)
+                : this.dynamoManager.createReplicatedQuorumForcibly(
                 serviceName, epoch, nodes, this, state);
     }
 
     @Override
     public boolean deleteReplicaGroup(String serviceName, int epoch) {
-        return this.dynamoManager.deleteReplicatedQuorum(serviceName, epoch);
+        return reconfigurationServices.contains(serviceName) ? super.deleteReplicaGroup(serviceName, epoch) : this.dynamoManager.deleteReplicatedQuorum(serviceName, epoch);
     }
 
     @Override
     public Set<NodeIDType> getReplicaGroup(String serviceName) {
-        return this.dynamoManager.getReplicaGroup(serviceName);
+        return reconfigurationServices.contains(serviceName) ? super.getReplicaGroup(serviceName) : this.dynamoManager.getReplicaGroup(serviceName);
     }
     @Override
     public Integer getEpoch(String name) {

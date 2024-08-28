@@ -7,6 +7,7 @@ import edu.umass.cs.consistency.EventualConsistency.Domain.CheckpointLog;
 import edu.umass.cs.consistency.EventualConsistency.Domain.DAG;
 import edu.umass.cs.consistency.EventualConsistency.Domain.GraphNode;
 import edu.umass.cs.consistency.EventualConsistency.Domain.RequestInformation;
+import edu.umass.cs.gigapaxos.PaxosConfig;
 import edu.umass.cs.gigapaxos.interfaces.ExecutedCallback;
 import edu.umass.cs.gigapaxos.interfaces.Reconcilable;
 import edu.umass.cs.gigapaxos.interfaces.Replicable;
@@ -22,8 +23,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,9 +42,11 @@ public class DynamoManager<NodeIDType> {
     private final int myID;
     private final Repliconfigurable myApp;
     private final HashMap<String, ReplicatedDynamoStateMachine> replicatedQuorums;
-    private final int REQUESTS_COUNT_BEFORE_CHECKPOINT = 6;
-    private final int CHECKPOINT_VERSION_THRESHOLD = 10;
-    private AtomicBoolean pseudo_failure = new AtomicBoolean(false);
+    private final int REQUESTS_COUNT_BEFORE_CHECKPOINT;
+    private final int CHECKPOINT_VERSION_THRESHOLD;
+    // Changed only when state transfer is to be done
+    public static AtomicBoolean pseudo_failure = new AtomicBoolean(false);
+    public static AtomicBoolean state_transfer = new AtomicBoolean(false);
     private int countRequestsReceived;
     // maps the quorumID to DAG associated
     private HashMap<String, DAG> requestDAG = new HashMap<>();
@@ -54,7 +59,6 @@ public class DynamoManager<NodeIDType> {
     private HashMap<Long, DynamoRequestAndCallback> requestsReceived = new HashMap<Long, DynamoRequestAndCallback>();
     private HashMap<Long, RecoveryCheck> recoveryCheckHashMap = new HashMap<>();
     private ArrayList<String> quorums = new ArrayList<String>();
-//    private final LargeCheckpointer largeCheckpointer;
     public static final Logger log = Logger.getLogger(DynamoManager.class.getName());
 
     public static final Class<?> application = DynamoApp.class;
@@ -79,6 +83,9 @@ public class DynamoManager<NodeIDType> {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        Properties properties = PaxosConfig.getAsProperties();
+        REQUESTS_COUNT_BEFORE_CHECKPOINT = Integer.parseInt(properties.getProperty("DAG.REQUESTS_COUNT_BEFORE_CHECKPOINT"));
+        CHECKPOINT_VERSION_THRESHOLD = Integer.parseInt(properties.getProperty("DAG.CHECKPOINT_VERSION_THRESHOLD"));
         fileHandler.setFormatter(new SimpleFormatter());
         log.addHandler(fileHandler);
         log.setLevel(Level.FINE);
@@ -134,9 +141,9 @@ public class DynamoManager<NodeIDType> {
             if (nextCheckpoint != null) {
                 noOfCheckpoints += Math.floorDiv(countRequestsReceived, REQUESTS_COUNT_BEFORE_CHECKPOINT) - this.noOfCheckpoints;
                 if (latestNodes.size() == 1) {
-                    dagLogger.checkpoint(this.myApp.checkpoint(this.myApp.toString()), noOfCheckpoints, nextCheckpoint, quorumId, new ArrayList<>());
+                    dagLogger.checkpoint(this.myApp.checkpoint(this.myApp.toString()), noOfCheckpoints, nextCheckpoint, quorumId, new ArrayList<>(), myID);
                 } else {
-                    dagLogger.checkpoint(this.myApp.checkpoint(this.myApp.toString()), noOfCheckpoints, nextCheckpoint, quorumId, latestNodes);
+                    dagLogger.checkpoint(this.myApp.checkpoint(this.myApp.toString()), noOfCheckpoints, nextCheckpoint, quorumId, latestNodes, myID);
                 }
                 checkpointVC.put(quorumId, new HashMap<>());
                 for (int key : nextCheckpoint.keySet()) {
@@ -167,7 +174,6 @@ public class DynamoManager<NodeIDType> {
                 this.checkpointVersion = checkpointVersion;
                 this.serverId = serverId;
             }
-            System.out.println(this.noOfAcknowledgement > RECOVERY_THRESHOLD_SERVERS);
             return this.noOfAcknowledgement > RECOVERY_THRESHOLD_SERVERS;
         }
         public int getNoOfAcknowledgement() {
@@ -225,7 +231,6 @@ public class DynamoManager<NodeIDType> {
         public Integer incrementAck(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm) {
             this.numOfAcksReceived += 1;
             if (qp.getType() == DynamoRequestPacket.DynamoPacketType.GET_ACK) {
-                System.out.println("GET ACK received----------"+qp.getSource());
                 this.addToArrayListForReconcile(qp);
             }
             return this.numOfAcksReceived;
@@ -343,8 +348,9 @@ public class DynamoManager<NodeIDType> {
                 break;
             case STATE_TRANSMIT:
                 pseudo_failure.set(true);
+                state_transfer.set(true);
+                log.log(Level.SEVERE, "Pseudo failure initiated");
                 handleStateTransmit(qp, rqsm);
-                pseudo_failure.set(false);
                 break;
             case STOP:
                 handleStop(rqsm);
@@ -354,6 +360,85 @@ public class DynamoManager<NodeIDType> {
                 break;
         }
 
+    }
+
+    private class CheckPseudoFailure implements Runnable {
+        private final String quorumId;
+        private final ScheduledExecutorService executor;
+
+        // Constructor
+        CheckPseudoFailure(String quorumId) {
+            this.quorumId = quorumId;
+            this.executor = Executors.newScheduledThreadPool(1); // Initialize ExecutorService
+        }
+
+        // Run method to check pseudo_failure and restore state if necessary
+        @Override
+        public void run() {
+            while (true) {
+                if (!state_transfer.get() || !pseudo_failure.get()) {
+                    DynamoManager.log.log(Level.INFO, "state transfer procedure is completed, stopping the check.");
+                    break;
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            if(!pseudo_failure.get()){
+                state_transfer.set(false);
+                log.log(Level.SEVERE, "Pseudo failure cancelled");
+                this.stop();
+                return;
+            }
+            try {
+                // Reset the state in RAM from the one stored on disk
+                DynamoManager.log.log(Level.INFO, "Reset initiated from received state");
+                CheckpointLog receivedCheckpointLog = DynamoManager.this.replicatedQuorums.get(quorumId).getDagLogger().restore();
+                DynamoManager.this.requestDAG.remove(quorumId);
+
+                DynamoManager.this.requestDAG.put(quorumId, new DAG(receivedCheckpointLog.getVectorClock()));
+                if (!receivedCheckpointLog.getLatestNodes().isEmpty()) {
+                    DynamoManager.this.requestDAG.get(quorumId).addChildrenNodes(
+                            receivedCheckpointLog.getLatestNodes(),
+                            DynamoManager.this.requestDAG.get(quorumId).getRootNode()
+                    );
+                }
+                ArrayList<GraphNode> latestNodes = new ArrayList<>();
+                for (HashMap<Integer, Integer> vectorClock : receivedCheckpointLog.getLatestNodes()) {
+                    latestNodes.add(new GraphNode(vectorClock));
+                }
+                DynamoManager.this.myApp.restore(myApp.toString(), receivedCheckpointLog.getState());
+                DynamoManager.this.noOfCheckpoints = receivedCheckpointLog.getNoOfCheckpoints();
+                pseudo_failure.set(false);
+                log.log(Level.INFO, "State reinstantiation completed");
+                log.log(Level.INFO, "Pseudo failure stopped");
+                this.stop();
+            } catch (JSONException e) {
+                pseudo_failure.set(false);
+                log.log(Level.SEVERE, "Pseudo failure cancelled");
+                Thread.currentThread().interrupt();
+            }
+        }
+
+        public void start() {
+            executor.submit(this);
+        }
+
+        // Method to stop the task gracefully
+        public void stop() {
+            executor.shutdownNow();  // Stop the executor and interrupt the task
+            try {
+                if (!executor.awaitTermination(1, TimeUnit.SECONDS)) {
+                    executor.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     private synchronized void handleStop(ReplicatedDynamoStateMachine rqsm){
@@ -371,7 +456,6 @@ public class DynamoManager<NodeIDType> {
     }
 
     private synchronized void handleRecoveryAck(DynamoRequestPacket qp){
-        System.out.println("Recovery ack received from "+qp.getSource()+" by "+myID);
         if(recoveryCheckHashMap.containsKey(qp.getRequestID()) && recoveryCheckHashMap.get(qp.getRequestID()).ackReceived(qp.getCheckpointVersion(), qp.getSource())){
             if(!(recoveryCheckHashMap.get(qp.getRequestID()).getServerId() == myID)){
                 log.log(Level.INFO, "Sending state transfer init to server: "+recoveryCheckHashMap.get(qp.getRequestID()).getServerId());
@@ -392,8 +476,12 @@ public class DynamoManager<NodeIDType> {
     private void handleStateTransmitInit(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm){
         try{
             if (this.replicatedQuorums.get(rqsm.getQuorumID()).getDagLogger().restore() != null) {
-                ObjectMapper objectMapper = new ObjectMapper();
-                qp.setResponsePacket(new DynamoRequestPacket.DynamoPacket(objectMapper.writeValueAsString(this.replicatedQuorums.get(rqsm.getQuorumID()).getDagLogger().restore())));
+                int port = this.replicatedQuorums.get(rqsm.getQuorumID()).getDagLogger().checkpointTransferRequest();
+                JSONObject jsonObject = new JSONObject();
+                jsonObject.put("Address", this.messenger.getNodeConfig().getNodeAddress(this.integerMap.get(myID)).getHostAddress());
+                jsonObject.put("Port", port);
+                jsonObject.put("FileName", this.replicatedQuorums.get(rqsm.getQuorumID()).getDagLogger().getCheckpointLogFilePath());
+                qp.setResponsePacket(new DynamoRequestPacket.DynamoPacket(jsonObject.toString()));
             }
         }
         catch (Exception e){
@@ -404,27 +492,19 @@ public class DynamoManager<NodeIDType> {
         qp.setSource(this.myID);
         this.sendRequest(qp, qp.getDestination());
     }
-    private void handleStateTransmit(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm){
-        ObjectMapper objectMapper = new ObjectMapper();
+    private void handleStateTransmit(DynamoRequestPacket qp, ReplicatedDynamoStateMachine rqsm)  {
         try {
-            CheckpointLog receivedCheckpointLog = objectMapper.readValue(qp.getResponsePacket().getValue(), CheckpointLog.class);
-            this.requestDAG.remove(rqsm.getQuorumID());
-
-            this.requestDAG.put(rqsm.getQuorumID(), new DAG(receivedCheckpointLog.getVectorClock()));
-            if(!receivedCheckpointLog.getLatestNodes().isEmpty()){
-                this.requestDAG.get(rqsm.getQuorumID()).addChildrenNodes(receivedCheckpointLog.getLatestNodes(), this.requestDAG.get(rqsm.getQuorumID()).getRootNode());
-            }
-            ArrayList<GraphNode> latestNodes = new ArrayList<>();
-            for(HashMap<Integer, Integer> vectorClock: receivedCheckpointLog.getLatestNodes()){
-                latestNodes.add(new GraphNode(vectorClock));
-            }
-            this.replicatedQuorums.get(rqsm.getQuorumID()).getDagLogger().checkpoint(receivedCheckpointLog.getState(), qp.getCheckpointVersion(), receivedCheckpointLog.getVectorClock(), rqsm.getQuorumID(), latestNodes);
-            this.myApp.restore(myApp.toString(), receivedCheckpointLog.getState());
-            this.noOfCheckpoints = qp.getCheckpointVersion();
-            log.log(Level.INFO, "State reinstantiation successful");
-        } catch (Exception e) {
-            log.log(Level.SEVERE, "State reinstantiation unsuccessful");
+            JSONObject jsonObject = new JSONObject(qp.getResponsePacket().getValue());
+            this.replicatedQuorums.get(rqsm.getQuorumID()).getDagLogger().getTransferredCheckpoint(jsonObject.getString("Address"),
+                    jsonObject.getInt("Port"), jsonObject.getString("FileName"));
+        } catch (JSONException | IOException e) {
+            log.log(Level.SEVERE, "State transmit packet could not be unpacked");
+            pseudo_failure.set(false);
+            log.log(Level.SEVERE, "Pseudo failure cancelled");
         }
+        CheckPseudoFailure checkPseudoFailure = new CheckPseudoFailure(rqsm.getQuorumID());
+        checkPseudoFailure.start();
+
     }
 
     private synchronized void handlePutRequest(DynamoRequestPacket qp,
@@ -722,7 +802,9 @@ public class DynamoManager<NodeIDType> {
         }
         try {
             for (GraphNode graphNode : rqsm.getDagLogger().readFromRollForwardFile()) {
+                DynamoManager.log.log(Level.INFO, "req: "+graphNode.getRequests().size());
                 for (RequestInformation requestInformation: graphNode.getRequests()){
+                    DynamoManager.log.log(Level.INFO, requestInformation.getRequestQuery());
                     if(!requestInformation.getRequestQuery().split(" ")[0].equals("PUT") || !requestInformation.getRequestQuery().split(" ")[0].equals("PUT_FWD")){
                         continue;
                     }
@@ -733,10 +815,11 @@ public class DynamoManager<NodeIDType> {
                 }
                 addChildNode(this.requestDAG.get(quorumID).latestNodesWithVectorClockAsDominant(graphNode, false), graphNode);
             }
+            log.log(Level.INFO, "Roll forward complete");
         }
         catch (Exception e){
             log.log(Level.SEVERE, e.toString());
-            log.log(Level.INFO, "Roll forward could not be performed");
+            log.log(Level.SEVERE, "Roll forward could not be performed");
         }
     }
 

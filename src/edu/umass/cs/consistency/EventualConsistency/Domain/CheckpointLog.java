@@ -9,13 +9,15 @@ public class CheckpointLog {
     private String quorumId;
     private HashMap<Integer, Integer> vectorClock;
     private ArrayList<HashMap<Integer, Integer>> latestNodes;
+    private int myId;
     public CheckpointLog() {}
-    public CheckpointLog(String state,int noOOfCheckpoints, String quorumId, HashMap<Integer, Integer> vectorClock, ArrayList<HashMap<Integer, Integer>> latestNodes) {
+    public CheckpointLog(String state,int noOOfCheckpoints, String quorumId, HashMap<Integer, Integer> vectorClock, ArrayList<HashMap<Integer, Integer>> latestNodes, int myId) {
         this.state = state;
         this.quorumId = quorumId;
         this.vectorClock = vectorClock;
         this.latestNodes = latestNodes;
         this.noOfCheckpoints = noOOfCheckpoints;
+        this.myId = myId;
     }
 
     public int getNoOfCheckpoints() {
@@ -56,5 +58,9 @@ public class CheckpointLog {
 
     public void setLatestNodes(ArrayList<HashMap<Integer, Integer>> latestNodes) {
         this.latestNodes = latestNodes;
+    }
+
+    public int getMyId() {
+        return myId;
     }
 }

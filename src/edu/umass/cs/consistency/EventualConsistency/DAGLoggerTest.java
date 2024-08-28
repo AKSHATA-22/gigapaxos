@@ -26,7 +26,7 @@ public class DAGLoggerTest {
         requests.add(new RequestInformation(101, "data1"));
         leafNodes.add(new GraphNode(leafVectorClock, requests));
 
-        dagLogger.checkpoint(state, 0, vectorClock, quorumId, leafNodes);
+        dagLogger.checkpoint(state, 0, vectorClock, quorumId, leafNodes, 0);
         dagLogger.restore();
         CheckpointLog restoredCheckpointLog = dagLogger.getCheckpointLog();
         if (restoredCheckpointLog != null) {

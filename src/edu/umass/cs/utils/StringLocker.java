@@ -36,7 +36,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *         total number of Strings used for synchronization will be small. It is
  *         best to use this class only for constant strings.
  */
-public class StringLocker {
+public class  StringLocker {
 	private final ConcurrentHashMap<String, String> map = new ConcurrentHashMap<String, String>();
 
 	/**

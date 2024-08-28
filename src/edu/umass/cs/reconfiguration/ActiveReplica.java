@@ -626,8 +626,7 @@ public class ActiveReplica<NodeIDType> implements ReconfiguratorCallback,
 		log.log(debug, "{0} handleMessage received {1}", new Object[] { this,
 				incoming.getSummary(log.isLoggable(debug)) });
 		long entryTime = System.nanoTime();
-//		System.out.println("Message received: "+incoming.getSummary());
-//		System.out.println(incoming.getRequestType());
+		System.out.println("Message received: "+incoming.getSummary());
 //		System.out.println(incoming.getClass());
 //		System.out.println("Is incoming instance of RC: ");
 //		System.out.println(incoming instanceof BasicReconfigurationPacket);

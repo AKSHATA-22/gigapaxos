@@ -1,0 +1,6 @@
+{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":10,\"65055\":23}","requests":"[{\"requestID\":787901193,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"pen\\\"}\"}]"}
+{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":11,\"65055\":23}","requests":"[{\"requestID\":1911473081,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"chair\\\"}\"}]"}
+{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":12,\"65055\":23}","requests":"[{\"requestID\":1492517406,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"pen\\\"}\"}]"}
+{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":13,\"65055\":23}","requests":"[{\"requestID\":1696430295,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"pen\\\"}\"}]"}
+{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":14,\"65055\":23}","requests":"[{\"requestID\":1049966965,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"chair\\\"}\"}]"}
+{"vectorClock":"{\"65056\":23,\"65057\":17,\"65058\":0,\"65055\":23}","requests":"[{\"requestID\":88570737,\"requestQuery\":\"PUT_FWD {\\\"value\\\":4,\\\"key\\\":\\\"table\\\"}\"}]"}

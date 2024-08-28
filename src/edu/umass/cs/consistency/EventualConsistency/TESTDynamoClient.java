@@ -62,7 +62,9 @@ public class TESTDynamoClient extends ReconfigurableAppClientAsync<DynamoRequest
             putString = dc.items[item];
         }
         try {
+            int randomNum = 1 + (int) (Math.random() * 5);
             jsonObject.put("key", putString);
+            jsonObject.put("value", randomNum);
         } catch (JSONException e) {
             throw new RuntimeException(e);
         }
@@ -87,42 +89,6 @@ public class TESTDynamoClient extends ReconfigurableAppClientAsync<DynamoRequest
         }
         return new DynamoRequestPacket((long) (Math.random() * Integer.MAX_VALUE),
                 jsonObject.toString(), DynamoRequestPacket.DynamoPacketType.GET, DynamoManager.getDefaultServiceName());
-    }
-    public static DynamoRequestPacket makeTestGetVCRequest(TESTDynamoClient dc, int item) {
-        JSONObject jsonObject = new JSONObject();
-        String getString;
-        if(item == -1) {
-            int randomNum = (int) (Math.random() * ((dc.items.length - 1) + 1));
-            getString = dc.items[randomNum];
-        }
-        else {
-            getString = dc.items[item];
-        }
-        try {
-            jsonObject.put("key", getString);
-        } catch (JSONException e) {
-            throw new RuntimeException(e);
-        }
-        return new DynamoRequestPacket((long) (Math.random() * Integer.MAX_VALUE),
-                jsonObject.toString(), DynamoRequestPacket.DynamoPacketType.TEST_GET_VC, DynamoManager.getDefaultServiceName());
-    }
-    public static DynamoRequestPacket makeTestGetRequests(TESTDynamoClient dc, int item) {
-        JSONObject jsonObject = new JSONObject();
-        String getString;
-        if(item == -1) {
-            int randomNum = (int) (Math.random() * ((dc.items.length - 1) + 1));
-            getString = dc.items[randomNum];
-        }
-        else {
-            getString = dc.items[item];
-        }
-        try {
-            jsonObject.put("key", getString);
-        } catch (JSONException e) {
-            throw new RuntimeException(e);
-        }
-        return new DynamoRequestPacket((long) (Math.random() * Integer.MAX_VALUE),
-                jsonObject.toString(), DynamoRequestPacket.DynamoPacketType.TEST_GET_REQ, DynamoManager.getDefaultServiceName());
     }
     public boolean isDominant(HashMap<Integer, Integer> vectorClock, String object, boolean isGETRequest){
         if(!objectToVectorClock.containsKey(object)){
@@ -152,9 +118,10 @@ public class TESTDynamoClient extends ReconfigurableAppClientAsync<DynamoRequest
         }
         return true;
     }
-    public void sendAppRequest(DynamoRequestPacket request, int port) throws IOException, InterruptedException{
+    public void sendAppRequest(DynamoRequestPacket request, int port) throws IOException, InterruptedException, JSONException {
         if(request.getRequestType() == DynamoRequestPacket.DynamoPacketType.PUT){
-            objectToNumberOfEntries.put(request.getRequestValue(), objectToNumberOfEntries.getOrDefault(request.getRequestValue(), 0) + 1);
+            JSONObject jsonObject = new JSONObject(request.getRequestValue());
+            objectToNumberOfEntries.put(jsonObject.getString("key"), objectToNumberOfEntries.getOrDefault(request.getRequestValue(), 0) + jsonObject.getInt("value"));
         }
         this.sendRequest(request,
                 new InetSocketAddress("localhost", port),
@@ -191,90 +158,6 @@ public class TESTDynamoClient extends ReconfigurableAppClientAsync<DynamoRequest
                         return (DynamoRequestPacket) response;
                     }
                 });
-    }
-    public ArrayList<HashMap<Integer, Integer>> sendTESTRequest(DynamoRequestPacket request, int port) throws IOException, InterruptedException{
-        if(request.getRequestType() == DynamoRequestPacket.DynamoPacketType.PUT){
-            objectToNumberOfEntries.put(request.getRequestValue(), objectToNumberOfEntries.getOrDefault(request.getRequestValue(), 0) + 1);
-        }
-        ArrayList<HashMap<Integer, Integer>> responseVC = new ArrayList<>();
-        this.sendRequest(request,
-                new InetSocketAddress("localhost", port),
-                new Callback<Request, DynamoRequestPacket>() {
-
-                    long createTime = System.currentTimeMillis();
-
-                    @Override
-                    public DynamoRequestPacket processResponse(Request response) {
-                        assert (response instanceof DynamoRequestPacket) :
-                                response.getSummary();
-
-                        log.log(Level.INFO, "Response for request ["
-                                + request.getSummary()
-                                + " "
-                                + request.getRequestValue()
-                                + "] = "
-                                + ((DynamoRequestPacket) response).getTestResponse()
-                                + " received in "
-                                + (System.currentTimeMillis() - createTime)
-                                + "ms");
-                        System.out
-                                .println("Response for request ["
-                                        + request.getSummary()
-                                        + " "
-                                        + request.getRequestValue()
-                                        + "] = "
-                                        + ((DynamoRequestPacket) response).getTestResponse()
-                                        + " received in "
-                                        + (System.currentTimeMillis() - createTime)
-                                        + "ms");
-                        responseVC.addAll(((DynamoRequestPacket) response).getTestResponse());
-                        return (DynamoRequestPacket) response;
-                    }
-                });
-        Thread.sleep(500);
-        return responseVC;
-    }
-    public HashMap<Long, String> sendTESTGetRequest(DynamoRequestPacket request, int port) throws IOException, InterruptedException{
-        if(request.getRequestType() == DynamoRequestPacket.DynamoPacketType.PUT){
-            objectToNumberOfEntries.put(request.getRequestValue(), objectToNumberOfEntries.getOrDefault(request.getRequestValue(), 0) + 1);
-        }
-        HashMap<Long, String> requestsReceived = new HashMap<>();
-        this.sendRequest(request,
-                new InetSocketAddress("localhost", port),
-                new Callback<Request, DynamoRequestPacket>() {
-
-                    long createTime = System.currentTimeMillis();
-
-                    @Override
-                    public DynamoRequestPacket processResponse(Request response) {
-                        assert (response instanceof DynamoRequestPacket) :
-                                response.getSummary();
-
-                        log.log(Level.INFO, "Response for request ["
-                                + request.getSummary()
-                                + " "
-                                + request.getRequestValue()
-                                + "] = "
-                                + ((DynamoRequestPacket) response).getAllRequests()
-                                + " received in "
-                                + (System.currentTimeMillis() - createTime)
-                                + "ms");
-                        System.out
-                                .println("Response for request ["
-                                        + request.getSummary()
-                                        + " "
-                                        + request.getRequestValue()
-                                        + "] = "
-                                        + ((DynamoRequestPacket) response).getAllRequests()
-                                        + " received in "
-                                        + (System.currentTimeMillis() - createTime)
-                                        + "ms");
-                        requestsReceived.putAll(((DynamoRequestPacket) response).getAllRequests());
-                        return (DynamoRequestPacket) response;
-                    }
-                });
-        Thread.sleep(500);
-        return requestsReceived;
     }
 
 
