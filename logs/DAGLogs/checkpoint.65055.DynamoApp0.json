@@ -1,1 +1,1 @@
-{"state":"{\"chair\":16,\"pen\":13,\"table\":30}","noOfCheckpoints":13,"quorumId":"DynamoApp0","vectorClock":{"65056":21,"65057":17,"65058":0,"65055":23},"latestNodes":[],"myId":65055}
+{"state":"{\"chair\":16,\"pen\":14,\"table\":16}","noOfCheckpoints":14,"quorumId":"DynamoApp0","vectorClock":{"65056":19,"65057":18,"65058":9,"65055":24},"latestNodes":[],"myId":65055}

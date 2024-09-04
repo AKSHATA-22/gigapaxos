@@ -1,0 +1,1 @@
+{"vectorClock":"{\"65056\":21,\"65057\":23,\"65058\":12,\"65055\":23}","requests":"[{\"requestID\":1847541905,\"requestQuery\":\"GET_ACK {\\\"key\\\":\\\"pen\\\"}\"},{\"requestID\":1697423089,\"requestQuery\":\"GET_ACK {\\\"key\\\":\\\"pen\\\"}\"}]"}

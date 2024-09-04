@@ -1,0 +1,3 @@
+{"vectorClock":"{\"65056\":20,\"65057\":21,\"65058\":11,\"65055\":23}","requests":"[{\"requestID\":1323808702,\"requestQuery\":\"GET_ACK {\\\"key\\\":\\\"table\\\"}\"}]"}
+{"vectorClock":"{\"65056\":20,\"65057\":22,\"65058\":9,\"65055\":23}","requests":"[{\"requestID\":1202445316,\"requestQuery\":\"PUT_FWD {\\\"value\\\":5,\\\"key\\\":\\\"table\\\"}\"}]"}
+{"vectorClock":"{\"65056\":21,\"65057\":22,\"65058\":11,\"65055\":23}","requests":"[{\"requestID\":1697423089,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"pen\\\"}\"}]"}

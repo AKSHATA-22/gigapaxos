@@ -1,6 +1,5 @@
 package edu.umass.cs.consistency.EventualConsistency.Domain;
 
-import edu.umass.cs.consistency.EventualConsistency.DynamoApp;
 import edu.umass.cs.consistency.EventualConsistency.DynamoManager;
 
 import java.util.ArrayList;
@@ -115,8 +114,8 @@ public class DAG {
         }
         latestNodes.add(toBeCompared);
     }
-    public HashMap<Long, String> getAllRequests(HashMap <Integer, Integer> vectorClock){
-        HashMap<Long, String> mapOfRequests = new HashMap<>();
+    public HashMap<Integer, HashMap<Long, String>> getRequestsPerMember(HashMap <Integer, Integer> vectorClock, HashMap<Integer, HashMap<Integer, Integer>> memberVectorClocks){
+        HashMap<Integer, HashMap<Long, String>> mapOfRequests = new HashMap<>();
         Stack<GraphNode> graphNodeStack = new Stack<>();
         ArrayList<HashMap<Integer, Integer>> visited = new ArrayList<>();
         graphNodeStack.push(rootNode);
@@ -124,8 +123,38 @@ public class DAG {
             GraphNode current = graphNodeStack.pop();
             visited.add(current.getVectorClock());
             if(!current.getRequests().isEmpty() && current.isMinor(vectorClock)){
-                for(RequestInformation requestInformation: current.getRequests()){
-                    mapOfRequests.put(requestInformation.getRequestID(), requestInformation.getRequestQuery());
+                for (Integer memberId: memberVectorClocks.keySet()){
+                    if(!current.isMinor(memberVectorClocks.get(memberId))){
+                        for(RequestInformation requestInformation: current.getRequests()){
+                            if(!mapOfRequests.containsKey(memberId)){
+                                mapOfRequests.put(memberId, new HashMap<>());
+                            }
+                            mapOfRequests.get(memberId).put(requestInformation.getRequestID(), requestInformation.getRequestQuery());
+                        }
+                    }
+                }
+            }
+            for(GraphNode childNode: current.getChildren()){
+                if(childNode != null && !visited.contains(childNode.getVectorClock()))
+                    graphNodeStack.push(childNode);
+            }
+        }
+        return mapOfRequests;
+    }
+
+    public HashMap<Long, String> getAllExecutedRequests(HashMap <Integer, Integer> tillVectorClock, HashMap <Integer, Integer> fromVectorClock){
+        HashMap<Long, String> mapOfRequests = new HashMap<>();
+        Stack<GraphNode> graphNodeStack = new Stack<>();
+        ArrayList<HashMap<Integer, Integer>> visited = new ArrayList<>();
+        graphNodeStack.push(rootNode);
+        while (!graphNodeStack.isEmpty()){
+            GraphNode current = graphNodeStack.pop();
+            visited.add(current.getVectorClock());
+            if(!current.getRequests().isEmpty() && current.isMinor(tillVectorClock)){
+                if(fromVectorClock == null || !current.isMinor(fromVectorClock)) {
+                    for (RequestInformation requestInformation : current.getRequests()) {
+                        mapOfRequests.put(requestInformation.getRequestID(), requestInformation.getRequestQuery());
+                    }
                 }
             }
             for(GraphNode childNode: current.getChildren()){

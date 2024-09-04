@@ -1,6 +1,5 @@
-{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":10,\"65055\":23}","requests":"[{\"requestID\":787901193,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"pen\\\"}\"}]"}
-{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":11,\"65055\":23}","requests":"[{\"requestID\":1911473081,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"chair\\\"}\"}]"}
-{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":12,\"65055\":23}","requests":"[{\"requestID\":1492517406,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"pen\\\"}\"}]"}
-{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":13,\"65055\":23}","requests":"[{\"requestID\":1696430295,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"pen\\\"}\"}]"}
-{"vectorClock":"{\"65056\":21,\"65057\":17,\"65058\":14,\"65055\":23}","requests":"[{\"requestID\":1049966965,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"chair\\\"}\"}]"}
-{"vectorClock":"{\"65056\":23,\"65057\":17,\"65058\":0,\"65055\":23}","requests":"[{\"requestID\":88570737,\"requestQuery\":\"PUT_FWD {\\\"value\\\":4,\\\"key\\\":\\\"table\\\"}\"}]"}
+{"vectorClock":"{\"65056\":19,\"65057\":18,\"65058\":10,\"65055\":21}","requests":"[{\"requestID\":1751162275,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"table\\\"}\"}]"}
+{"vectorClock":"{\"65056\":19,\"65057\":18,\"65058\":9,\"65055\":23}","requests":"[{\"requestID\":2138335152,\"requestQuery\":\"GET_ACK {\\\"key\\\":\\\"chair\\\"}\"},{\"requestID\":514973717,\"requestQuery\":\"PUT_FWD {\\\"value\\\":5,\\\"key\\\":\\\"chair\\\"}\"},{\"requestID\":2138335152,\"requestQuery\":\"GET_ACK {\\\"key\\\":\\\"chair\\\"}\"}]"}
+{"vectorClock":"{\"65056\":19,\"65057\":18,\"65058\":11,\"65055\":23}","requests":"[{\"requestID\":1323808702,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"table\\\"}\"}]"}
+{"vectorClock":"{\"65056\":20,\"65057\":22,\"65058\":9,\"65055\":23}","requests":"[{\"requestID\":1202445316,\"requestQuery\":\"PUT_FWD {\\\"value\\\":5,\\\"key\\\":\\\"table\\\"}\"}]"}
+{"vectorClock":"{\"65056\":20,\"65057\":22,\"65058\":12,\"65055\":23}","requests":"[{\"requestID\":1697423089,\"requestQuery\":\"GET_FWD {\\\"key\\\":\\\"pen\\\"}\"}]"}
